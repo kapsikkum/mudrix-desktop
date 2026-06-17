@@ -1,0 +1,30 @@
+appId: org.wizardchat.desktop
+productName: WizardChat
+
+directories:
+  output: release
+
+files:
+  - dist/**/*
+
+extraResources:
+  - from: wizardchat-web/dist
+    to: web-app
+
+asar: true
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64]
+  icon: icons/icon.icns
+  extendInfo:
+    NSCameraUsageDescription: "WizardChat needs camera access for video calls"
+    NSMicrophoneUsageDescription: "WizardChat needs microphone access for voice calls"
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Network
+  icon: icons/source/icon.png
