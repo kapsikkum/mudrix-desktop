@@ -35,6 +35,9 @@ npm run package:mac
 
 # build for linux (AppImage)
 npm run package:linux
+
+# build for windows
+npm run package:win
 ```
 
 The output can be found in `release/`.

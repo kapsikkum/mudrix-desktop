@@ -75,6 +75,8 @@ protocol.registerSchemesAsPrivileged([
 
 app.setName('WizardChat');
 
+app.setAppUserModelId('org.wizardchat.desktop');
+
 app.whenReady().then(async () => {
   if (process.platform === 'darwin') {
     await systemPreferences.askForMediaAccess('camera');

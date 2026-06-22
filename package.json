@@ -8,7 +8,8 @@
     "build:web": "npm --prefix wizardchat-web ci && npm --prefix wizardchat-web run build",
     "build:electron": "tsc -p tsconfig.json",
     "package:mac": "npm run build:web && npm run build:electron && electron-builder --mac --publish=never",
-    "package:linux": "npm run build:web && npm run build:electron && electron-builder --linux --publish=never"
+    "package:linux": "npm run build:web && npm run build:electron && electron-builder --linux --publish=never",
+    "package:win": "npm run build:web && npm run build:electron && electron-builder --win --publish=never"
   },
   "dependencies": {
     "electron-updater": "^6.6.0"

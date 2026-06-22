@@ -28,3 +28,17 @@ linux:
       arch: [x64]
   category: Network
   icon: icons/source/icon.png
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: icons/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: WizardChat
