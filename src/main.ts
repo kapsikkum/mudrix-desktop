@@ -1,4 +1,13 @@
-import { app, BrowserWindow, session, ipcMain, systemPreferences, protocol, net } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  session,
+  ipcMain,
+  systemPreferences,
+  protocol,
+  net,
+  Notification,
+} from 'electron';
 import { autoUpdater } from 'electron-updater';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
@@ -44,7 +53,7 @@ function createWindow(): void {
   mainWindow.loadURL(`${PROTOCOL}://app/`);
 
   if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
   }
 
   mainWindow.on('closed', () => {
@@ -91,13 +100,24 @@ app.whenReady().then(async () => {
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const headers = { ...details.responseHeaders };
+
+    const stripHeader = (name: string) => {
+      const lower = name.toLowerCase();
+      for (const key of Object.keys(headers)) {
+        if (key.toLowerCase() === lower) delete headers[key];
+      }
+    };
+
+    stripHeader('access-control-allow-origin');
+    stripHeader('access-control-allow-headers');
+    stripHeader('access-control-allow-methods');
+    stripHeader('content-security-policy');
+    stripHeader('x-frame-options');
+
     headers['Access-Control-Allow-Origin'] = ['*'];
     headers['Access-Control-Allow-Headers'] = ['*'];
     headers['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, OPTIONS'];
-    delete headers['content-security-policy'];
-    delete headers['Content-Security-Policy'];
-    delete headers['x-frame-options'];
-    delete headers['X-Frame-Options'];
+
     callback({ responseHeaders: headers });
   });
 
@@ -123,6 +143,31 @@ app.whenReady().then(async () => {
   ipcMain.on('install-update', () => {
     autoUpdater.quitAndInstall();
   });
+
+  ipcMain.handle(
+    'show-notification',
+    (_event, payload: { title: string; body: string; icon?: string; silent?: boolean }) => {
+      try {
+        const n = new Notification({
+          title: payload.title,
+          body: payload.body,
+          silent: payload.silent ?? true,
+        });
+        n.on('click', () => {
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+          }
+        });
+        n.show();
+        return true;
+      } catch (err) {
+        console.error('[main] show-notification failed', err);
+        return false;
+      }
+    }
+  );
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

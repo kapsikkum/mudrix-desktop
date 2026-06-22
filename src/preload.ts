@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('update-progress', (_e, pct) => cb(pct));
   },
   installUpdate: () => ipcRenderer.send('install-update'),
+  showNotification: (payload: { title: string; body: string; icon?: string; silent?: boolean }) =>
+    ipcRenderer.invoke('show-notification', payload),
 });
