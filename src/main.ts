@@ -72,11 +72,6 @@ app.setName('WizardChat');
 app.setAppUserModelId('org.wizardchat.desktop');
 
 app.whenReady().then(async () => {
-  if (process.platform === 'darwin') {
-    await systemPreferences.askForMediaAccess('camera');
-    await systemPreferences.askForMediaAccess('microphone');
-  }
-
   protocol.handle(PROTOCOL, (request) => {
     const webRoot = getWebDistPath();
     const url = new URL(request.url);
@@ -119,8 +114,22 @@ app.whenReady().then(async () => {
     callback({ responseHeaders: headers });
   });
 
-  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
-    callback(['media', 'mediaKeySystem', 'getUserMedia'].includes(permission));
+  session.defaultSession.setPermissionRequestHandler(async (_wc, permission, callback, details) => {
+    const types = (details as { mediaTypes?: ('audio' | 'video')[] }).mediaTypes;
+
+    if (permission === 'media') {
+      if (process.platform === 'darwin') {
+        let granted = true;
+        if (types?.includes('audio')) granted = granted && await systemPreferences.askForMediaAccess('microphone');
+        if (types?.includes('video')) granted = granted && await systemPreferences.askForMediaAccess('camera');
+        callback(granted);
+      } else {
+        callback(true);
+      }
+      return;
+    }
+
+    callback(permission === 'mediaKeySystem');
   });
 
   createWindow();
