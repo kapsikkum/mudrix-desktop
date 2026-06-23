@@ -4,6 +4,9 @@
   "version": "26.6.0",
   "description": "WizardChat Desktop — Simple, Secure, Magical",
   "homepage": "https://wizardchat.org",
+  "author": "Arian Farahani, Jan Philipp Kleinschmidt",
+  "license": "AGPL-3.0",
+  "repository": "https://gitlab.com/wizardchat/wizardchat-desktop",
   "scripts": {
     "build:web": "npm --prefix wizardchat-web ci && npm --prefix wizardchat-web run build",
     "build:electron": "tsc -p tsconfig.json",
