@@ -4,6 +4,7 @@ import {
   session,
   ipcMain,
   systemPreferences,
+  desktopCapturer,
   protocol,
   net,
   Notification,
@@ -129,7 +130,43 @@ app.whenReady().then(async () => {
       return;
     }
 
+    if (permission === 'display-capture') {
+      callback(true);
+      return;
+    }
+
     callback(permission === 'mediaKeySystem');
+  });
+
+  ipcMain.handle('get-desktop-sources', async (_e, options) => {
+    const sources = await desktopCapturer.getSources(options);
+    return sources.map(s => ({
+      id: s.id,
+      name: s.name,
+      display_id: s.display_id,
+      thumbnail: {
+        dataUrl: s.thumbnail.toDataURL(),
+      },
+      appIcon: s.appIcon?.toDataURL() ?? null,
+    }));
+  });
+
+  let pendingPickerCallback: ((source: any) => void) | null = null;
+
+  ipcMain.on('desktop-source-selected', (_e, source) => {
+    pendingPickerCallback?.(source);
+    pendingPickerCallback = null;
+  });
+
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    pendingPickerCallback = (source: any) => {
+      if (source) {
+        callback({ video: source } as any);
+      } else {
+        callback(null as any);
+      }
+    };
+    mainWindow?.webContents.send('open-desktop-picker');
   });
 
   createWindow();

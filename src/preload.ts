@@ -17,6 +17,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   closeWindow: () => ipcRenderer.send('window-close'),
   getPlatform: () => process.platform,
+  getDesktopSources: (options: { types: string[]; thumbnailSize?: { width: number; height: number } }) =>
+    ipcRenderer.invoke('get-desktop-sources', options),
+  onOpenDesktopPicker: (cb: () => void) => {
+    ipcRenderer.on('open-desktop-picker', () => cb());
+  },
+  selectDesktopSource: (source: any) => {
+    ipcRenderer.send('desktop-source-selected', source);
+  },
 });
 
 const MACOS_BAR_HEIGHT = 28;
