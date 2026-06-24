@@ -172,6 +172,7 @@ app.whenReady().then(async () => {
   createWindow();
 
   if (app.isPackaged) {
+    autoUpdater.setFeedURL({ provider: 'gitlab', projectId: 'wizardchat/wizardchat-desktop' });
     autoUpdater.checkForUpdates();
     autoUpdater.on('update-available', (info: { version: string }) => {
       mainWindow?.webContents.send('update-available', info.version);
