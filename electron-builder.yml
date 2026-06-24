@@ -13,11 +13,18 @@ extraResources:
 
 asar: true
 
+afterPack: build-resources/after-pack.cjs
+
 mac:
   target:
     - target: dmg
       arch: [arm64]
   icon: icons/icon.icns
+  identity: null
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build-resources/entitlements.mac.plist
+  entitlementsInherit: build-resources/entitlements.mac.plist
   extendInfo:
     NSCameraUsageDescription: "WizardChat needs camera access for video calls"
     NSMicrophoneUsageDescription: "WizardChat needs microphone access for voice calls"
