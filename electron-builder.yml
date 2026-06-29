@@ -19,6 +19,8 @@ mac:
   target:
     - target: dmg
       arch: [arm64]
+    - target: zip
+      arch: [arm64]
   icon: icons/icon.icns
   identity: null
   hardenedRuntime: true
