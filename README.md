@@ -41,3 +41,13 @@ npm run package:win
 ```
 
 The output can be found in `release/`.
+
+---
+
+## macOS: Override unsigned build warning
+
+On macOS, WizardChat is not officially signed. The first time you open it, macOS may block the app. To allow it:
+
+1. Open **System Settings** → **Privacy & Security**
+2. Scroll to the bottom under **Security**
+3. Click **Allow WizardChat**
