@@ -85,7 +85,7 @@ build:mac:
   script:
     - npm ci --ignore-scripts
     - npm run build:electron
-    - npx electron-builder --mac --publish=never -c.extraMetadata.version="${CI_COMMIT_TAG#v}"
+    - npx electron-builder --mac --publish=never --config.extraMetadata.version="${CI_COMMIT_TAG#v}"
   artifacts:
     paths:
       - release/
@@ -102,7 +102,7 @@ build:linux:
   script:
     - npm ci --ignore-scripts
     - npm run build:electron
-    - npx electron-builder --linux --publish=never -c.extraMetadata.version="${CI_COMMIT_TAG#v}"
+    - npx electron-builder --linux --publish=never --config.extraMetadata.version="${CI_COMMIT_TAG#v}"
   artifacts:
     paths:
       - release/
@@ -117,7 +117,7 @@ build:win:
   script:
     - npm ci --ignore-scripts
     - npm run build:electron
-    - npx electron-builder --win --publish=never -c.extraMetadata.version="$($env:CI_COMMIT_TAG.Substring(1))"
+    - npx electron-builder --win --publish=never --config.extraMetadata.version="$($env:CI_COMMIT_TAG.Substring(1))"
   artifacts:
     paths:
       - release/
