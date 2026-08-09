@@ -1,7 +1,7 @@
 {
   "name": "wizardchat-desktop",
   "main": "dist/main.js",
-  "version": "26.7.1",
+  "version": "26.8.0",
   "description": "WizardChat Desktop — Simple, Secure, Magical",
   "homepage": "https://wizardchat.org",
   "author": "Arian Farahani, Jan Philipp Kleinschmidt",
