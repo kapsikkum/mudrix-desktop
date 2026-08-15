@@ -138,6 +138,8 @@ app.whenReady().then(async () => {
     callback(permission === 'mediaKeySystem');
   });
 
+  ipcMain.handle('get-app-version', () => app.getVersion());
+
   ipcMain.handle('get-desktop-sources', async (_e, options) => {
     const sources = await desktopCapturer.getSources(options);
     return sources.map(s => ({

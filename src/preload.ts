@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   closeWindow: () => ipcRenderer.send('window-close'),
   getPlatform: () => process.platform,
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getDesktopSources: (options: { types: string[]; thumbnailSize?: { width: number; height: number } }) =>
     ipcRenderer.invoke('get-desktop-sources', options),
   onOpenDesktopPicker: (cb: () => void) => {
