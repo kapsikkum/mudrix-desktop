@@ -14,6 +14,7 @@ import * as path from 'path';
 import { pathToFileURL } from 'url';
 
 let mainWindow: BrowserWindow | null = null;
+let pendingRoomUrl: string | null = null;
 
 const PROTOCOL = 'wizardchat';
 const DEFAULT_BG = '#1c1c30';
@@ -56,6 +57,13 @@ function createWindow(): void {
   });
 
   mainWindow.loadURL(`${PROTOCOL}://app/`);
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (pendingRoomUrl) {
+      mainWindow?.webContents.send('open-room', pendingRoomUrl);
+      pendingRoomUrl = null;
+    }
+  });
 
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools();
@@ -205,14 +213,19 @@ app.whenReady().then(async () => {
     }
   });
 
-  ipcMain.handle('show-notification', (_e, payload: { title: string; body: string; icon?: string; silent?: boolean }) => {
+  ipcMain.handle('show-notification', (_e, payload: { title: string; body: string; icon?: string; silent?: boolean; roomUrl?: string }) => {
     try {
+      const { roomUrl } = payload;
       const n = new Notification({ title: payload.title, body: payload.body, silent: payload.silent ?? true });
       n.on('click', () => {
-        if (mainWindow) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
           if (mainWindow.isMinimized()) mainWindow.restore();
           mainWindow.show();
           mainWindow.focus();
+          if (roomUrl) mainWindow.webContents.send('open-room', roomUrl);
+        } else if (roomUrl) {
+          pendingRoomUrl = roomUrl;
+          createWindow();
         }
       });
       n.show();
@@ -221,6 +234,12 @@ app.whenReady().then(async () => {
       console.error('[main] show-notification failed', err);
       return false;
     }
+  });
+
+  ipcMain.handle('get-pending-room', () => {
+    const url = pendingRoomUrl;
+    pendingRoomUrl = null;
+    return url;
   });
 
   app.on('activate', () => {

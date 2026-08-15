@@ -11,8 +11,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('update-progress', (_e, pct) => cb(pct));
   },
   installUpdate: () => ipcRenderer.send('install-update'),
-  showNotification: (payload: { title: string; body: string; icon?: string; silent?: boolean }) =>
+  showNotification: (payload: { title: string; body: string; icon?: string; silent?: boolean; roomUrl?: string }) =>
     ipcRenderer.invoke('show-notification', payload),
+  onOpenRoom: (cb: (url: string) => void) => {
+    ipcRenderer.on('open-room', (_e, url) => cb(url));
+  },
+  getPendingRoom: () => ipcRenderer.invoke('get-pending-room'),
   minimizeWindow: () => ipcRenderer.send('window-minimize'),
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   closeWindow: () => ipcRenderer.send('window-close'),
