@@ -1,5 +1,4 @@
 appId: org.wizardchat.desktop
-productName: WizardChat
 
 directories:
   output: release
@@ -10,6 +9,8 @@ files:
 extraResources:
   - from: wizardchat-web/dist
     to: web-app
+  - from: icons/source/icon.png
+    to: icons/source/icon.png
 
 asar: true
 
@@ -33,6 +34,7 @@ mac:
     NSScreenCaptureUsageDescription: "WizardChat needs screen access for sharing during calls"
 
 linux:
+  executableName: WizardChat
   target:
     - target: AppImage
       arch: [x64]

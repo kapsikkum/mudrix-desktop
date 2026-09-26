@@ -1,5 +1,6 @@
 {
   "name": "wizardchat-desktop",
+  "productName": "WizardChat",
   "main": "dist/main.js",
   "version": "26.9.1",
   "description": "WizardChat Desktop — Simple, Secure, Magical",

@@ -30,7 +30,10 @@ function getIconPath(): string | undefined {
   switch (process.platform) {
     case 'darwin': return path.join(__dirname, '..', 'icons', 'icon.icns');
     case 'win32':  return path.join(__dirname, '..', 'icons', 'icon.ico');
-    default:       return path.join(__dirname, '..', 'icons', 'source', 'icon.png');
+    default:
+      return app.isPackaged
+        ? path.join(process.resourcesPath, 'icons', 'source', 'icon.png')
+        : path.join(__dirname, '..', 'icons', 'source', 'icon.png');
   }
 }
 
