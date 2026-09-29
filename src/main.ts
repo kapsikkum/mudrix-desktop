@@ -8,10 +8,13 @@ import {
   protocol,
   net,
   Notification,
+  shell,
 } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import * as path from 'path';
+import { existsSync, statSync } from 'fs';
 import { pathToFileURL } from 'url';
+import { SsoLoopback, type SsoCallback } from './ssoLoopback';
 
 let mainWindow: BrowserWindow | null = null;
 let pendingRoomUrl: string | null = null;
@@ -20,6 +23,23 @@ const PROTOCOL = 'wizardchat';
 const DEFAULT_BG = '#1c1c30';
 const DEFAULT_FG = '#e8e8f0';
 const TITLEBAR_HEIGHT = 32;
+const EXTERNAL_SCHEMES = new Set(['http:', 'https:', 'mailto:']);
+
+function isExternalUrl(url: string): boolean {
+  try {
+    return EXTERNAL_SCHEMES.has(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
+function openExternal(url: string): void {
+  try {
+    void shell.openExternal(url);
+  } catch (err) {
+    console.error('[main] openExternal failed', url, err);
+  }
+}
 
 function getWebDistPath(): string {
   if (app.isPackaged) return path.join(process.resourcesPath, 'web-app');
@@ -59,12 +79,38 @@ function createWindow(): void {
     },
   });
 
+  // non wizardchat:// requests get handed to the system browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalUrl(url)) {
+      openExternal(url);
+    } else {
+      console.warn('[main] blocked popup for non-external url', url);
+    }
+    return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isExternalUrl(url)) return;
+    if (isSsoRedirect(url)) {
+      event.preventDefault();
+      void openSsoInBrowser(url);
+      return;
+    }
+    event.preventDefault();
+    openExternal(url);
+  });
+
   mainWindow.loadURL(`${PROTOCOL}://app/`);
 
   mainWindow.webContents.on('did-finish-load', () => {
     if (pendingRoomUrl) {
       mainWindow?.webContents.send('open-room', pendingRoomUrl);
       pendingRoomUrl = null;
+    }
+    if (pendingDeepLink) {
+      const deepLink = pendingDeepLink;
+      pendingDeepLink = null;
+      mainWindow?.webContents.loadURL(deepLink);
     }
   });
 
@@ -83,7 +129,86 @@ protocol.registerSchemesAsPrivileged([{
 app.setName('WizardChat');
 app.setAppUserModelId('org.wizardchat.desktop');
 
-app.whenReady().then(async () => {
+let pendingDeepLink: string | null = null;
+let protocolReady = false;
+
+function isSsoRedirect(url: string): boolean {
+  try {
+    return new URL(url).pathname.includes('/_matrix/client/v3/login/sso/redirect');
+  } catch {
+    return false;
+  }
+}
+
+function isDeepLink(url: string): boolean {
+  return url.startsWith(`${PROTOCOL}://`);
+}
+
+function focusMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function handleDeepLink(url: string): void {
+  if (!isDeepLink(url)) return;
+  if (protocolReady && mainWindow && !mainWindow.isDestroyed()) {
+    focusMainWindow();
+    mainWindow.webContents.loadURL(url);
+  } else {
+    pendingDeepLink = url;
+  }
+}
+
+if (app.isPackaged) {
+  app.setAsDefaultProtocolClient(PROTOCOL);
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1] ?? '.')]);
+}
+
+function loadSsoCallbackRoute(params: URLSearchParams): void {
+  const url = new URL(`${PROTOCOL}://app/sso/callback`);
+  url.search = params.toString();
+
+  focusMainWindow();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.loadURL(url.toString());
+  }
+}
+
+function openSsoCallbackInApp({ loginToken, state }: SsoCallback): void {
+  const params = new URLSearchParams({ loginToken });
+  if (state) params.set('state', state);
+  loadSsoCallbackRoute(params);
+}
+
+function onSsoCallbackFailure(): void {
+  loadSsoCallbackRoute(new URLSearchParams());
+}
+
+const ssoLoopback = new SsoLoopback(openSsoCallbackInApp, onSsoCallbackFailure);
+
+async function openSsoInBrowser(ssoUrl: string): Promise<void> {
+  try {
+    const rewritten = await ssoLoopback.buildBrowserUrl(ssoUrl);
+    if (!rewritten) {
+      openExternal(ssoUrl);
+      return;
+    }
+    openExternal(rewritten);
+  } catch (err) {
+    console.error('[main] failed to start SSO loopback', err);
+    openExternal(ssoUrl);
+  }
+}
+
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleDeepLink(url);
+});
+
+async function onReady(): Promise<void> {
   protocol.handle(PROTOCOL, (request) => {
     const webRoot = getWebDistPath();
     const url = new URL(request.url);
@@ -99,9 +224,26 @@ app.whenReady().then(async () => {
     }
 
     const absPath = path.normalize(path.join(webRoot, relPath));
-    if (!absPath.startsWith(path.normalize(webRoot))) return new Response('Forbidden', { status: 403 });
+    const rel = path.relative(webRoot, absPath);
+    if (path.isAbsolute(rel) || rel.split(path.sep).includes('..')) {
+      return new Response('Forbidden', { status: 403 });
+    }
+
+    if (!existsSync(absPath) || !statSync(absPath).isFile()) {
+      const acceptsHtml = (request.headers.get('accept') ?? '').includes('text/html');
+      if (!acceptsHtml) return new Response('Not Found', { status: 404 });
+      return net.fetch(pathToFileURL(path.join(webRoot, 'index.html')).toString());
+    }
+
     return net.fetch(pathToFileURL(absPath).toString());
   });
+
+  protocolReady = true;
+  if (pendingDeepLink) {
+    const deepLink = pendingDeepLink;
+    pendingDeepLink = null;
+    handleDeepLink(deepLink);
+  }
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const headers = { ...details.responseHeaders };
@@ -248,8 +390,22 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
-});
+}
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    const deepLink = argv.find((arg) => isDeepLink(arg));
+    if (deepLink) handleDeepLink(deepLink);
+    focusMainWindow();
+  });
+
+  app.whenReady().then(onReady);
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+app.on('will-quit', () => ssoLoopback.close());

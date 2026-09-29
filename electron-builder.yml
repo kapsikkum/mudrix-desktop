@@ -1,5 +1,10 @@
 appId: org.wizardchat.desktop
 
+protocols:
+  - name: WizardChat
+    schemes:
+      - wizardchat
+
 directories:
   output: release
 
