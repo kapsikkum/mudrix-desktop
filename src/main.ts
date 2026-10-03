@@ -18,6 +18,7 @@ import { SsoLoopback, type SsoCallback } from './ssoLoopback';
 
 let mainWindow: BrowserWindow | null = null;
 let pendingRoomUrl: string | null = null;
+let latestVersion: string | null = null;
 
 const PROTOCOL = 'wizardchat';
 const DEFAULT_BG = '#1c1c30';
@@ -328,20 +329,39 @@ async function onReady(): Promise<void> {
 
   if (app.isPackaged) {
     autoUpdater.setFeedURL({ provider: 'gitlab', projectId: '82340703' });
+
+    if (process.platform === 'darwin') {
+      autoUpdater.autoDownload = false;
+    }
+
     autoUpdater.checkForUpdates();
     setInterval(() => autoUpdater.checkForUpdates(), 10 * 60 * 1000);
+
     autoUpdater.on('update-available', (info: { version: string }) => {
+      latestVersion = info.version;
       mainWindow?.webContents.send('update-available', info.version);
+      if (process.platform === 'darwin') {
+        mainWindow?.webContents.send('update-downloaded');
+      }
     });
+
     autoUpdater.on('download-progress', (p: { percent: number }) => {
       mainWindow?.webContents.send('update-progress', p.percent);
     });
+
     autoUpdater.on('update-downloaded', () => {
       mainWindow?.webContents.send('update-downloaded');
     });
   }
 
-  ipcMain.on('install-update', () => autoUpdater.quitAndInstall());
+  ipcMain.on('install-update', () => {
+    if (process.platform === 'darwin') {
+      const version = latestVersion ?? app.getVersion();
+      const gitlabUrl = `https://gitlab.com/api/v4/projects/82340703/packages/generic/wizardchat-desktop/v${version}/WizardChat-${version}-arm64.dmg`;      openExternal(gitlabUrl);
+    } else {
+      autoUpdater.quitAndInstall();
+    }
+  });
 
   ipcMain.on('window-minimize', () => mainWindow?.minimize());
   ipcMain.on('window-maximize', () => {
