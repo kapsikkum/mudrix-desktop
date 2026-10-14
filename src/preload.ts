@@ -92,7 +92,7 @@ window.addEventListener('DOMContentLoaded', () => {
   strip.style.cssText = `position:fixed;top:0;left:0;right:0;height:${WIN_BAR_HEIGHT}px;z-index:2147483647;background:${FALLBACK.bar};-webkit-app-region:drag;user-select:none;display:flex;align-items:center;gap:7px;padding-left:10px;box-sizing:border-box`;
 
   const img = document.createElement('img');
-  img.src = 'wizardchat://app/assets/images/logo.svg';
+  img.src = 'org.wizardchat.desktop://app/assets/images/logo.svg';
   img.style.cssText = `width:16px;height:16px;border-radius:3px;flex-shrink:0;pointer-events:none`;
   img.onerror = () => { img.style.display = 'none'; };
 

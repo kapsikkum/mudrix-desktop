@@ -12,15 +12,17 @@ import {
 } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import * as path from 'path';
+import * as http from 'http';
 import { existsSync, statSync } from 'fs';
 import { pathToFileURL } from 'url';
-import { SsoLoopback, type SsoCallback } from './ssoLoopback';
+import { SsoLoopback } from './ssoLoopback';
 
 let mainWindow: BrowserWindow | null = null;
 let pendingRoomUrl: string | null = null;
 let latestVersion: string | null = null;
 
-const PROTOCOL = 'wizardchat';
+const PROTOCOL = 'org.wizardchat.desktop';
+const OIDC_LOOPBACK_PORT = 34759;
 const DEFAULT_BG = '#1c1c30';
 const DEFAULT_FG = '#e8e8f0';
 const TITLEBAR_HEIGHT = 32;
@@ -80,7 +82,7 @@ function createWindow(): void {
     },
   });
 
-  // non wizardchat:// requests get handed to the system browser
+  // non-org.wizardchat.desktop:// requests get handed to the system browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isExternalUrl(url)) {
       openExternal(url);
@@ -142,7 +144,7 @@ function isSsoRedirect(url: string): boolean {
 }
 
 function isDeepLink(url: string): boolean {
-  return url.startsWith(`${PROTOCOL}://`);
+  return url.startsWith(`${PROTOCOL}:`);
 }
 
 function focusMainWindow(): void {
@@ -152,13 +154,34 @@ function focusMainWindow(): void {
   mainWindow.focus();
 }
 
+function normalizeDeepLink(url: string): string {
+  try {
+    const parsed = new URL(url);
+
+    if (parsed.searchParams.has('code') || parsed.searchParams.has('error')) {
+      return `${PROTOCOL}://app/oidc/callback${parsed.search}`;
+    }
+    if (parsed.searchParams.has('loginToken')) {
+      return `${PROTOCOL}://app/sso/callback${parsed.search}`;
+    }
+
+    if (parsed.protocol === `${PROTOCOL}:` && (parsed.host !== 'app' || !parsed.host)) {
+      return `${PROTOCOL}://app${parsed.pathname}${parsed.search}`;
+    }
+  } catch {
+    // Fall back to the original URL if parsing fails.
+  }
+  return url;
+}
+
 function handleDeepLink(url: string): void {
   if (!isDeepLink(url)) return;
+  const targetUrl = normalizeDeepLink(url);
   if (protocolReady && mainWindow && !mainWindow.isDestroyed()) {
     focusMainWindow();
-    mainWindow.webContents.loadURL(url);
+    mainWindow.webContents.loadURL(targetUrl);
   } else {
-    pendingDeepLink = url;
+    pendingDeepLink = targetUrl;
   }
 }
 
@@ -178,7 +201,7 @@ function loadSsoCallbackRoute(params: URLSearchParams): void {
   }
 }
 
-function openSsoCallbackInApp({ loginToken, state }: SsoCallback): void {
+function openSsoCallbackInApp({ loginToken, state }: { loginToken: string; state: string | null }): void {
   const params = new URLSearchParams({ loginToken });
   if (state) params.set('state', state);
   loadSsoCallbackRoute(params);
@@ -188,11 +211,28 @@ function onSsoCallbackFailure(): void {
   loadSsoCallbackRoute(new URLSearchParams());
 }
 
-const ssoLoopback = new SsoLoopback(openSsoCallbackInApp, onSsoCallbackFailure);
+function handleLoopbackCallback(params: URLSearchParams): void {
+  const loginToken = params.get('loginToken');
+  if (loginToken) {
+    openSsoCallbackInApp({ loginToken, state: params.get('state') });
+    return;
+  }
+  if (params.has('code') || params.has('error')) {
+    const qs = params.toString();
+    focusMainWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.loadURL(`${PROTOCOL}://app/oidc/callback${qs ? `?${qs}` : ''}`);
+    }
+    return;
+  }
+  onSsoCallbackFailure();
+}
+
+const loopback = new SsoLoopback(OIDC_LOOPBACK_PORT, handleLoopbackCallback, onSsoCallbackFailure);
 
 async function openSsoInBrowser(ssoUrl: string): Promise<void> {
   try {
-    const rewritten = await ssoLoopback.buildBrowserUrl(ssoUrl);
+    const rewritten = await loopback.buildBrowserUrl(ssoUrl);
     if (!rewritten) {
       openExternal(ssoUrl);
       return;
@@ -240,6 +280,10 @@ async function onReady(): Promise<void> {
   });
 
   protocolReady = true;
+  if (!pendingDeepLink) {
+    const startupDeepLink = process.argv.find((arg) => isDeepLink(arg));
+    if (startupDeepLink) pendingDeepLink = normalizeDeepLink(startupDeepLink);
+  }
   if (pendingDeepLink) {
     const deepLink = pendingDeepLink;
     pendingDeepLink = null;
@@ -323,6 +367,10 @@ async function onReady(): Promise<void> {
       }
     };
     mainWindow?.webContents.send('open-desktop-picker');
+  });
+
+  void loopback.ensureListening().catch((err) => {
+    console.error('[main] loopback server error', err);
   });
 
   createWindow();
@@ -428,4 +476,6 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('will-quit', () => ssoLoopback.close());
+app.on('will-quit', () => {
+  loopback.close();
+});

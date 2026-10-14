@@ -3,7 +3,7 @@ appId: org.wizardchat.desktop
 protocols:
   - name: WizardChat
     schemes:
-      - wizardchat
+      - org.wizardchat.desktop
 
 directories:
   output: release

@@ -15,20 +15,15 @@ const DONE_PAGE = `<!doctype html>
 </style></head>
 <body>WizardChat</body></html>`;
 
-export interface SsoCallback {
-  loginToken: string;
-  state: string | null;
-}
-
 export class SsoLoopback {
   private server: http.Server | null = null;
   private port = 0;
   private nonce = randomUUID();
   private idleTimer: NodeJS.Timeout | null = null;
-  private consumed = false;
 
   constructor(
-    private readonly onCallback: (callback: SsoCallback) => void,
+    private readonly portHint: number,
+    private readonly onCallback: (params: URLSearchParams) => void,
     private readonly onFailure: () => void,
   ) {}
 
@@ -59,20 +54,23 @@ export class SsoLoopback {
     return out.toString();
   }
 
-  private ensureListening(): Promise<number> {
+  async ensureListening(): Promise<number> {
     if (this.server && this.server.listening) {
       this.armIdleTimeout();
-      return Promise.resolve(this.port);
+      return this.port;
+    }
+
+    if (this.portHint > 0) {
+      this.port = this.portHint;
     }
 
     return new Promise((resolve, reject) => {
       const server = http.createServer((req, res) => this.handle(req, res));
       server.once('error', reject);
-      server.listen(0, HOST, () => {
+      server.listen(this.port || 0, HOST, () => {
         const address = server.address();
         this.port = typeof address === 'object' && address ? address.port : 0;
         this.server = server;
-        this.consumed = false;
         this.armIdleTimeout();
         resolve(this.port);
       });
@@ -96,36 +94,26 @@ export class SsoLoopback {
       params = new URLSearchParams();
     }
 
-    const nonceOk = params.get(NONCE_PARAM) === this.nonce;
-    const accepted = hostOk && nonceOk && !this.consumed && req.method === 'GET';
+    const ssoRequest = params.has(NONCE_PARAM);
+    const nonceOk = !ssoRequest || params.get(NONCE_PARAM) === this.nonce;
+
+    // loginToken is required for the Matrix SSO callback; OIDC callback queries
+    // must contain either an authorization code or an OIDC error.
+    const isCallback =
+      params.has('loginToken') || params.has('code') || params.has('error');
+
+    const accepted = hostOk && nonceOk && req.method === 'GET' && isCallback;
     if (!accepted) {
       res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(DONE_PAGE);
       return;
     }
 
-    this.consumed = true;
+    this.armIdleTimeout();
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(DONE_PAGE);
 
-    const loginToken = params.get('loginToken');
-    if (!loginToken) {
-      setImmediate(() => {
-        this.close();
-        this.onFailure();
-      });
-      return;
-    }
-
-    const callback: SsoCallback = {
-      loginToken,
-      state: params.get('state'),
-    };
-
-    setImmediate(() => {
-      this.close();
-      this.onCallback(callback);
-    });
+    setImmediate(() => this.onCallback(params));
   }
 
   close(): void {
@@ -134,7 +122,6 @@ export class SsoLoopback {
       this.idleTimer = null;
     }
     this.nonce = randomUUID();
-    this.consumed = false;
     if (this.server) {
       this.server.close();
       this.server = null;
