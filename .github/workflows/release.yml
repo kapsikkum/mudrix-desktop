@@ -118,12 +118,23 @@ jobs:
           args: ${{ steps.bundles.outputs.args }}
 
       # tauri-action has no "upload as a workflow artifact" input; hand the exact files it
-      # built (artifactPaths) to upload-artifact ourselves so rename-assets can collect them.
+      # built to upload-artifact ourselves so rename-assets can collect them. artifactPaths
+      # is a JSON-encoded array as a string, not a newline list, so unpack it with jq first.
+      - name: List artifact paths
+        id: artifact_paths
+        shell: bash
+        run: |
+          {
+            echo 'list<<ARTIFACT_PATHS_EOF'
+            echo '${{ steps.tauri_build.outputs.artifactPaths }}' | jq -r '.[]'
+            echo 'ARTIFACT_PATHS_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Upload bundle artifacts
         uses: actions/upload-artifact@v4
         with:
           name: bundle-${{ matrix.name }}
-          path: ${{ steps.tauri_build.outputs.artifactPaths }}
+          path: ${{ steps.artifact_paths.outputs.list }}
           if-no-files-found: error
           retention-days: 1
 
