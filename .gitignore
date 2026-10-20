@@ -1,4 +1,11 @@
 node_modules/
-release/
 dist/
+release/
 .DS_Store
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+src-tauri/WixTools/
+*.key
+*.key.pub

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSCameraUsageDescription</key>
+    <string>Mudrix needs camera access for video calls.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Mudrix needs microphone access for voice and video calls.</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Mudrix needs screen access to share your screen during calls.</string>
+</dict>
+</plist>

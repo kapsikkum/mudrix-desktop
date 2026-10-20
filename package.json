@@ -1,26 +1,29 @@
 {
-  "name": "wizardchat-desktop",
-  "productName": "WizardChat",
-  "main": "dist/main.js",
+  "name": "mudrix-desktop",
+  "productName": "Mudrix",
   "version": "26.10.2",
-  "description": "WizardChat Desktop — Simple, Secure, Magical",
-  "homepage": "https://wizardchat.org",
-  "author": "Arian Farahani, Jan Philipp Kleinschmidt",
+  "private": true,
+  "description": "Mudrix Desktop: the Mudrix web client in a Tauri shell",
+  "homepage": "https://github.com/kapsikkum/mudrix-desktop",
+  "author": "Arian Farahani, Jan Philipp Kleinschmidt (WizardChat Desktop); kapsikkum (Mudrix)",
   "license": "AGPL-3.0",
-  "repository": "https://gitlab.com/wizardchat/wizardchat-desktop",
-  "scripts": {
-    "build:web": "npm --prefix wizardchat-web ci && npm --prefix wizardchat-web run build",
-    "build:electron": "tsc -p tsconfig.json",
-    "package:mac": "npm run build:web && npm run build:electron && electron-builder --mac --publish=never",
-    "package:linux": "npm run build:web && npm run build:electron && electron-builder --linux --publish=never",
-    "package:win": "npm run build:web && npm run build:electron && electron-builder --win --publish=never"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kapsikkum/mudrix-desktop.git"
   },
-  "dependencies": {
-    "electron-updater": "^6.6.0"
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build:web": "npm --prefix mudrix-web ci && npm --prefix mudrix-web run build",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:dev:attach": "tauri dev --config src-tauri/tauri.attach.conf.json",
+    "desktop:build": "tauri build",
+    "version:check": "node scripts/check-version.mjs",
+    "version:set": "node scripts/set-version.mjs"
   },
   "devDependencies": {
-    "electron": "^34.3.0",
-    "electron-builder": "^26.17.0",
-    "typescript": "^5.7.3"
+    "@tauri-apps/cli": "2.12.3"
   }
 }

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "REPLACE_WITH_CONTENT_OF_THE_PUBLIC_KEY_FILE",
+      "endpoints": [
+        "https://github.com/kapsikkum/mudrix-desktop/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

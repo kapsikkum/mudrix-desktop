@@ -1,0 +1,46 @@
+[package]
+name = "mudrix-desktop"
+# Kept in step with package.json (the single source of truth, see scripts/set-version.mjs).
+version = "26.10.2"
+description = "Mudrix Desktop: the Mudrix web client in a Tauri shell."
+authors = ["kapsikkum", "Arian Farahani", "Jan Philipp Kleinschmidt"]
+license = "AGPL-3.0-only"
+repository = "https://github.com/kapsikkum/mudrix-desktop"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "mudrix_desktop_lib"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "Mudrix"
+path = "src/main.rs"
+
+[features]
+# Off until a minisign key pair and a release endpoint exist: with it on, the app
+# initialises tauri-plugin-updater, which requires `plugins.updater` in the config.
+# Build with:  --features updater --config src-tauri/tauri.updater.conf.json   (see RELEASING.md)
+updater = ["dep:tauri-plugin-updater"]
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-updater = { version = "2", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
