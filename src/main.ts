@@ -23,9 +23,10 @@ let latestVersion: string | null = null;
 
 const PROTOCOL = 'org.wizardchat.desktop';
 const OIDC_LOOPBACK_PORT = 34759;
-const DEFAULT_BG = '#1c1c30';
+const DEFAULT_BG = '#11111e';
 const DEFAULT_FG = '#e8e8f0';
-const TITLEBAR_HEIGHT = 32;
+// Must match TITLE_BAR_HEIGHT in wizardchat-web's TitleBar
+const TITLEBAR_HEIGHT = 40;
 const EXTERNAL_SCHEMES = new Set(['http:', 'https:', 'mailto:']);
 
 function isExternalUrl(url: string): boolean {
@@ -70,7 +71,8 @@ function createWindow(): void {
     icon: getIconPath(),
     backgroundColor: DEFAULT_BG,
     titleBarStyle: 'hidden',
-    trafficLightPosition: { x: 12, y: 8 },
+    // Vertically centred in the web app's title bar
+    trafficLightPosition: { x: 14, y: 13 },
     ...(process.platform !== 'darwin' ? {
       titleBarOverlay: { color: DEFAULT_BG, symbolColor: DEFAULT_FG, height: TITLEBAR_HEIGHT },
     } : {}),
@@ -121,6 +123,8 @@ function createWindow(): void {
     mainWindow.webContents.openDevTools();
   }
 
+  mainWindow.on('enter-full-screen', () => mainWindow?.webContents.send('fullscreen-changed', true));
+  mainWindow.on('leave-full-screen', () => mainWindow?.webContents.send('fullscreen-changed', false));
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
@@ -410,13 +414,6 @@ async function onReady(): Promise<void> {
       autoUpdater.quitAndInstall();
     }
   });
-
-  ipcMain.on('window-minimize', () => mainWindow?.minimize());
-  ipcMain.on('window-maximize', () => {
-    if (!mainWindow) return;
-    mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
-  });
-  ipcMain.on('window-close', () => mainWindow?.close());
 
   ipcMain.on('set-theme-color', (_e, bgColor: string, symbolColor: string) => {
     if (!mainWindow) return;
