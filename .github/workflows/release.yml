@@ -107,6 +107,7 @@ jobs:
 
       # tauri-action runs `npm run build:web` (tauri.conf.json beforeBuildCommand) first.
       - uses: tauri-apps/tauri-action@v0
+        id: tauri_build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Optional: only used (to sign updater artifacts) when the secret exists.
@@ -115,7 +116,16 @@ jobs:
         with:
           # No tagName: the release is created once, by the last job, from the renamed files.
           args: ${{ steps.bundles.outputs.args }}
-          uploadWorkflowArtifacts: true
+
+      # tauri-action has no "upload as a workflow artifact" input; hand the exact files it
+      # built (artifactPaths) to upload-artifact ourselves so rename-assets can collect them.
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.name }}
+          path: ${{ steps.tauri_build.outputs.artifactPaths }}
+          if-no-files-found: error
+          retention-days: 1
 
   rename-assets:
     # tauri-action names files after the bundler (Mudrix_26.10.3_x64-setup.exe). Re-upload them as
