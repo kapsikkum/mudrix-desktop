@@ -66,7 +66,9 @@ async fn tokio_sleep(d: Duration) {
 
 /// Where update progress and failures are recorded, for diagnosing "update failed" reports.
 fn log_path() -> PathBuf {
-    std::env::temp_dir().join("mudrix-update").join("update.log")
+    std::env::temp_dir()
+        .join("mudrix-update")
+        .join("update.log")
 }
 
 fn log(msg: &str) {
@@ -75,7 +77,11 @@ fn log(msg: &str) {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
         let secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -157,7 +163,10 @@ async fn check_inner(app: &AppHandle) -> Result<CheckStatus, Box<dyn std::error:
     let actual = hex(&hasher.finalize());
     if !actual.eq_ignore_ascii_case(&expected) {
         let _ = std::fs::remove_file(&path);
-        return Err(format!("downloaded installer failed its checksum (got {actual}, expected {expected})").into());
+        return Err(format!(
+            "downloaded installer failed its checksum (got {actual}, expected {expected})"
+        )
+        .into());
     }
 
     log(&format!("downloaded and verified {}", path.display()));

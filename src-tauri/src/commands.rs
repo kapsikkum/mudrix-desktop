@@ -246,7 +246,10 @@ fn unique_path(dir: &std::path::Path, name: &str) -> std::path::PathBuf {
         return candidate;
     }
     let path = std::path::Path::new(name);
-    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("download");
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("download");
     let ext = path.extension().and_then(|e| e.to_str());
     for n in 1..1000 {
         let numbered = match ext {
@@ -362,7 +365,10 @@ mod download_tests {
 
     #[test]
     fn header_names_are_percent_decoded() {
-        assert_eq!(percent_decode("New%20Text%20Document.txt"), "New Text Document.txt");
+        assert_eq!(
+            percent_decode("New%20Text%20Document.txt"),
+            "New Text Document.txt"
+        );
         assert_eq!(percent_decode("100%"), "100%");
         assert_eq!(percent_decode("%E3%81%82.txt"), "あ.txt");
     }
