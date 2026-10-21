@@ -107,6 +107,7 @@ pub fn run() {
             commands::set_app_icon,
             commands::show_notification,
             commands::open_external,
+            commands::save_download,
             commands::open_auth_in_browser,
             commands::take_pending_navigation,
             commands::is_window_visible,
