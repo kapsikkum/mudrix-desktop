@@ -1,7 +1,7 @@
 [package]
 name = "mudrix-desktop"
 # Kept in step with package.json (the single source of truth, see scripts/set-version.mjs).
-version = "26.10.4"
+version = "26.10.6"
 description = "Mudrix Desktop: the Mudrix web client in a Tauri shell."
 authors = ["kapsikkum", "Arian Farahani", "Jan Philipp Kleinschmidt"]
 license = "AGPL-3.0-only"

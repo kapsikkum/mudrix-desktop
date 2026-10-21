@@ -186,6 +186,11 @@ pub fn set_desktop_settings(app: AppHandle, patch: SettingsPatch) -> DesktopSett
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
+pub fn set_app_icon(app: AppHandle, png: Option<Vec<u8>>) {
+    tray::set_themed_icon(&app, png);
+}
+
+#[tauri::command]
 pub fn set_unread_count(app: AppHandle, total: u32, highlight: u32) {
     tray::set_unread(&app, total, highlight);
 }

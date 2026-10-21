@@ -109,6 +109,7 @@ pub fn run() {
             commands::get_desktop_settings,
             commands::set_desktop_settings,
             commands::set_unread_count,
+            commands::set_app_icon,
             commands::show_notification,
             commands::open_external,
             commands::open_auth_in_browser,
