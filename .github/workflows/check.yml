@@ -43,6 +43,9 @@ jobs:
 
       # Also what tauri.conf.json's beforeBuildCommand does; the Rust build needs mudrix-web/dist.
       - run: npm run build:web
+        env:
+          VITE_GIPHY_API_KEY: ${{ secrets.VITE_GIPHY_API_KEY }}
+          VITE_KLIPY_API_KEY: ${{ secrets.VITE_KLIPY_API_KEY }}
 
       - uses: dtolnay/rust-toolchain@stable
         with:

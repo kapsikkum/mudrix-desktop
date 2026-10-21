@@ -63,6 +63,9 @@ jobs:
             name: linux-x64
             args: ''
     runs-on: ${{ matrix.platform }}
+    env:
+      VITE_GIPHY_API_KEY: ${{ secrets.VITE_GIPHY_API_KEY }}
+      VITE_KLIPY_API_KEY: ${{ secrets.VITE_KLIPY_API_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -113,6 +116,8 @@ jobs:
           # Optional: only used (to sign updater artifacts) when the secret exists.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_GIPHY_API_KEY: ${{ secrets.VITE_GIPHY_API_KEY }}
+          VITE_KLIPY_API_KEY: ${{ secrets.VITE_KLIPY_API_KEY }}
         with:
           # No tagName: the release is created once, by the last job, from the renamed files.
           args: ${{ steps.bundles.outputs.args }}
