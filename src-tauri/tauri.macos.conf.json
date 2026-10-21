@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Mudrix",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "center": true,
+        "visible": false,
+        "backgroundColor": "#1a1b1e",
+        "dragDropEnabled": false,
+        "decorations": true,
+        "titleBarStyle": "overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 12, "y": 16 }
+      }
+    ]
+  }
+}
