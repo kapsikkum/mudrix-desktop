@@ -2236,7 +2236,7 @@ dependencies = [
 
 [[package]]
 name = "mudrix-desktop"
-version = "26.10.11"
+version = "26.10.12"
 dependencies = [
  "reqwest 0.12.28",
  "serde",
