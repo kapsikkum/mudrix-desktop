@@ -16,6 +16,8 @@ It wraps the Mudrix web client (the `mudrix-web` git submodule) and adds:
 - native notifications; the sound is still played by the web app
 - an unread badge: tray icon and tooltip, Windows taskbar overlay, macOS dock badge
 - `matrix:` deep links
+- in-app updates read from the GitHub release feed (Windows and macOS install them, Linux gets a download prompt)
+- a themed app icon that follows the theme setting (window and tray)
 - SSO / OIDC login through the system browser (see below)
 
 ## Setup

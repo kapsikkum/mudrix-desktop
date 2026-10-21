@@ -56,5 +56,3 @@ jobs:
 
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-      - name: Clippy with the optional updater feature
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --features updater -- -D warnings

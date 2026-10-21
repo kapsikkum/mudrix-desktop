@@ -2,14 +2,13 @@
 //!
 //! Layout: `settings` (persisted shell settings), `tray` (tray icon, menu, unread badge),
 //! `auth` (SSO/OIDC through the system browser), `commands` (what the web app can call),
-//! `badge` (Windows taskbar overlay drawing), `updater` (optional, `--features updater`).
+//! `badge` (Windows taskbar overlay drawing), `updater` (releases.atom check + installer download).
 
 mod auth;
 mod badge;
 mod commands;
 mod settings;
 mod tray;
-#[cfg(feature = "updater")]
 mod updater;
 
 use std::sync::Mutex;
@@ -41,9 +40,6 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![AUTOSTART_FLAG]),
         ));
-
-    #[cfg(feature = "updater")]
-    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
     let app = builder
         .setup(|app| {
@@ -85,7 +81,6 @@ pub fn run() {
                 }
             }
 
-            #[cfg(feature = "updater")]
             updater::spawn(&handle);
             Ok(())
         })
@@ -116,6 +111,7 @@ pub fn run() {
             commands::take_pending_navigation,
             commands::is_window_visible,
             commands::install_update,
+            commands::check_for_updates,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the Mudrix desktop app");

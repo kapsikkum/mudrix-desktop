@@ -71,43 +71,22 @@ tauri-action reads `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIG
 `APPLE_PASSWORD`, `APPLE_TEAM_ID` for macOS and `bundle.windows.signCommand` (or a certificate thumbprint)
 for Windows.
 
-## In-app updates (off by default)
+## In-app updates
 
-`tauri-plugin-updater` is wired but compiled out (cargo feature `updater`) until a key pair and endpoint
-exist. The web app's existing "update available" toast already listens for `desktop://update-ready`.
+Updates need no signing key or endpoint. The app (`src-tauri/src/updater.rs`) reads the public
+`https://github.com/kapsikkum/mudrix-desktop/releases.atom` feed at start-up and every six hours (a plain
+web page, so no GitHub API rate limit) and picks the newest stable `vX.Y.Z` tag; pre-release tags are ignored.
+Builds from `tauri dev` and installs with `MUDRIX_NO_UPDATE` set never check.
 
-1. Generate the key pair (keep the private key secret and backed up; losing it strands installed apps):
-   ```sh
-   npx tauri signer generate -w ~/.tauri/mudrix.key
-   ```
-2. Put the **public** key (the content of `mudrix.key.pub`) into `src-tauri/tauri.updater.conf.json` as
-   `plugins.updater.pubkey`; check the `endpoints` URL.
-3. Add repository secrets `TAURI_SIGNING_PRIVATE_KEY` (content of the private key file) and
-   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
-4. Build with the feature and config:
-   `npm run tauri -- build --features updater --config src-tauri/tauri.updater.conf.json`.
-   In `release.yml` add these to the tauri-action `args` (and `uploadWorkflowArtifacts` already uploads the
-   `.sig` files and update bundles).
-5. Publish `latest.json` as a release asset (the endpoint
-   `https://github.com/kapsikkum/mudrix-desktop/releases/latest/download/latest.json`), in the shape
-   ```json
-   {
-     "version": "26.10.3",
-     "notes": "Release notes",
-     "pub_date": "2026-10-21T12:00:00Z",
-     "platforms": {
-       "windows-x86_64": { "signature": "<.sig content>", "url": "https://github.com/kapsikkum/mudrix-desktop/releases/download/v26.10.3/<setup.exe or .nsis.zip>" },
-       "darwin-x86_64":  { "signature": "...", "url": ".../Mudrix.app.tar.gz" },
-       "darwin-aarch64": { "signature": "...", "url": ".../Mudrix.app.tar.gz" },
-       "linux-x86_64":   { "signature": "...", "url": ".../Mudrix_26.10.3_amd64.AppImage" }
-     }
-   }
-   ```
-   `tauri-action` can generate and upload this file when it runs with `includeUpdaterJson: true` and a
-   `tagName`; since this workflow publishes the release in a separate job, do that from the build job or add a
-   small step that assembles the JSON from the `.sig` files.
+- **Windows:** downloads `Mudrix-<v>-windows-x64-setup.exe`, verifies it against the release's
+  `SHA256SUMS.txt`, and shows the web app's update toast. "Update now" quits, runs the per-user installer
+  silently (`/S /UPDATE`) and starts the new build.
+- **macOS:** downloads and verifies `Mudrix-<v>-macos-universal.dmg`, then replaces the running `.app` and
+  reopens it (if it is not run from an app bundle the disk image is opened instead).
+- **Linux:** only announces the release (`desktop://update-available`); the toast links to the release page.
 
-   Updates are verified against the public key, so an unsigned platform build is unaffected by this setup.
+The release workflow must keep these asset names and `SHA256SUMS.txt`. Settings > About has a manual
+"Check for updates" button. Signed updates (`tauri-plugin-updater`) were dropped: builds are unsigned.
 
 ## Rollback
 
@@ -120,3 +99,5 @@ keeps the user's data.
 - A full `tauri build` on each OS (only `cargo check` was run locally).
 - The first end-to-end SSO/OIDC login through the loopback listener against a real homeserver.
 - Windows taskbar overlay, macOS dock badge, `matrix:` handler registration from an installed build.
+- The in-app updater against a real newer release (the Windows silent install and the macOS bundle swap
+  especially); it needs an installed build older than the latest published release to test.

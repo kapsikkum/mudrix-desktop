@@ -2,10 +2,10 @@
 //! the unread badge (tray icon, Windows taskbar overlay, macOS dock badge).
 
 use crate::{commands, settings, MAIN_WINDOW};
+use std::sync::Mutex;
 use tauri::image::Image;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Wry};
 
 const TRAY_ID: &str = "main";
@@ -142,8 +142,8 @@ pub fn set_themed_icon(app: &AppHandle, png: Option<Vec<u8>>) {
         *themed = png.filter(|_| image.is_some());
     }
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let _ = tray.set_icon(Some(
-            image.unwrap_or_else(|| Image::from_bytes(ICON_NORMAL).expect("bundled tray icon")),
-        ));
+        let _ = tray.set_icon(Some(image.unwrap_or_else(|| {
+            Image::from_bytes(ICON_NORMAL).expect("bundled tray icon")
+        })));
     }
 }

@@ -253,8 +253,10 @@ pub fn is_window_visible(app: AppHandle) -> bool {
 
 #[tauri::command]
 pub fn install_update(app: AppHandle) {
-    #[cfg(feature = "updater")]
     crate::updater::install(&app);
-    #[cfg(not(feature = "updater"))]
-    let _ = app;
+}
+
+#[tauri::command]
+pub async fn check_for_updates(app: AppHandle) -> crate::updater::CheckStatus {
+    crate::updater::check(&app).await
 }
