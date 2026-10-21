@@ -64,6 +64,26 @@ async fn tokio_sleep(d: Duration) {
     let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(d)).await;
 }
 
+/// Where update progress and failures are recorded, for diagnosing "update failed" reports.
+fn log_path() -> PathBuf {
+    std::env::temp_dir().join("mudrix-update").join("update.log")
+}
+
+fn log(msg: &str) {
+    eprintln!("[desktop] {msg}");
+    let path = log_path();
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let _ = writeln!(f, "[{secs}] {msg}");
+    }
+}
+
 fn client() -> Result<reqwest::Client, reqwest::Error> {
     reqwest::Client::builder()
         .user_agent(format!("Mudrix-Desktop/{CURRENT}"))
@@ -75,7 +95,7 @@ pub async fn check(app: &AppHandle) -> CheckStatus {
     match check_inner(app).await {
         Ok(status) => status,
         Err(e) => {
-            eprintln!("[desktop] update check failed: {e}");
+            log(&format!("update check failed: {e}"));
             CheckStatus::Error
         }
     }
@@ -102,6 +122,7 @@ async fn check_inner(app: &AppHandle) -> Result<CheckStatus, Box<dyn std::error:
         return Ok(CheckStatus::UpToDate);
     }
     let page = format!("https://github.com/{REPO}/releases/tag/{tag}");
+    log(&format!("update found: {CURRENT} -> {version}"));
 
     let Some(asset) = asset_name(&version) else {
         announce(app, &version, &page, "desktop://update-available");
@@ -136,9 +157,10 @@ async fn check_inner(app: &AppHandle) -> Result<CheckStatus, Box<dyn std::error:
     let actual = hex(&hasher.finalize());
     if !actual.eq_ignore_ascii_case(&expected) {
         let _ = std::fs::remove_file(&path);
-        return Err("downloaded installer failed its checksum".into());
+        return Err(format!("downloaded installer failed its checksum (got {actual}, expected {expected})").into());
     }
 
+    log(&format!("downloaded and verified {}", path.display()));
     *state.ready.lock().unwrap() = Some(Ready {
         version: version.clone(),
         installer: path,
@@ -169,10 +191,10 @@ pub fn install(app: &AppHandle) {
     let Some(ready) = ready else { return };
     match launch_installer(&ready.installer) {
         Ok(()) => {
-            eprintln!("[desktop] installing update {}", ready.version);
+            log(&format!("installing update {}", ready.version));
             app.exit(0);
         }
-        Err(e) => eprintln!("[desktop] update install failed: {e}"),
+        Err(e) => log(&format!("update install failed: {e}")),
     }
 }
 
@@ -185,8 +207,9 @@ fn launch_installer(installer: &Path) -> std::io::Result<()> {
     // Wait for this process to exit, run the per-user NSIS installer silently in update mode,
     // then start the new build.
     let script = format!(
-        "ping -n 3 127.0.0.1 >nul & start /wait \"\" \"{}\" /S /UPDATE & start \"\" \"{}\"",
+        "ping -n 3 127.0.0.1 >nul & start /wait \"\" \"{}\" /S /UPDATE & echo installer exit code %errorlevel% >> \"{}\" & start \"\" \"{}\"",
         installer.display(),
+        log_path().display(),
         exe.display()
     );
     std::process::Command::new("cmd")
