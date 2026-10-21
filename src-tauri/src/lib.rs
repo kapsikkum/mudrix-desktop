@@ -4,6 +4,7 @@
 //! `auth` (SSO/OIDC through the system browser), `commands` (what the web app can call),
 //! `badge` (Windows taskbar overlay drawing), `updater` (releases.atom check + installer download).
 
+mod accent;
 mod auth;
 mod badge;
 mod commands;
@@ -108,6 +109,7 @@ pub fn run() {
             commands::show_notification,
             commands::open_external,
             commands::save_download,
+            accent::get_system_accent,
             commands::open_auth_in_browser,
             commands::take_pending_navigation,
             commands::is_window_visible,
