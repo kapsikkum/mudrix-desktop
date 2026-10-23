@@ -8,6 +8,7 @@ mod accent;
 mod auth;
 mod badge;
 mod commands;
+mod permissions;
 mod settings;
 mod tray;
 mod updater;
@@ -76,6 +77,7 @@ pub fn run() {
             }
 
             if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
+                permissions::allow_call_media(&window);
                 // The window starts hidden (no white flash); place it, then show it.
                 let _ = window.restore_state(commands::window_state_flags());
                 if !start_hidden {

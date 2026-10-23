@@ -2298,6 +2298,7 @@ dependencies = [
  "tokio",
  "url",
  "uuid",
+ "webview2-com",
 ]
 
 [[package]]
