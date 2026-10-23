@@ -16,7 +16,7 @@ It wraps the Mudrix web client (the `mudrix-web` git submodule) and adds:
 - native notifications; the sound is still played by the web app
 - an unread badge: tray icon and tooltip, Windows taskbar overlay, macOS dock badge
 - `matrix:` deep links
-- in-app updates read from the GitHub release feed (Windows and macOS install them, Linux gets a download prompt)
+- in-app updates, verified against a minisign signature (Windows and macOS install them, Linux gets a download prompt; AppImage installs update in place)
 - a themed app icon that follows the theme setting (window and tray)
 - SSO / OIDC login through the system browser (see below)
 
@@ -68,6 +68,24 @@ Releases are not code-signed.
 - **macOS**: Gatekeeper blocks the first launch. Open System Settings, Privacy & Security, scroll to
   Security and click "Open Anyway" (or right-click the app and choose Open).
 - **Linux**: no warning. Make the AppImage executable (`chmod +x`) and run it.
+
+The installers are unsigned, but in-app updates are not: every update is checked against a minisign
+signature (`tauri-plugin-updater`) before it is installed.
+
+## Update signing (maintainers)
+
+Updates are signed with a key pair you generate once. The private key stays in GitHub secrets, the public
+key is committed in `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`, currently a placeholder):
+
+```sh
+npx tauri signer generate -w ~/.tauri/mudrix-updater.key
+```
+
+Paste the printed public key into `plugins.updater.pubkey`, and add the secrets
+`TAURI_SIGNING_PRIVATE_KEY` (the key file's contents) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to the
+repository. Release builds fail while the placeholder is still in place (set
+`MUDRIX_ALLOW_PLACEHOLDER_UPDATER_KEY=1` for a throwaway local build; the app then keeps updates
+disabled). Details in `RELEASING.md`.
 
 ## Login: SSO and OIDC
 

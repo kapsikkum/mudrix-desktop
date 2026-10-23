@@ -5,8 +5,9 @@ Releases are plain `v*` tags built by `.github/workflows/release.yml`. A tag wit
 "latest". Upstream WizardChat used `prepare/v26.10.2-next.N` branches; the numbers here follow the same
 `YEAR.MONTH.N` scheme.
 
-Builds are **unsigned** (no Windows certificate, no Apple notarization, by decision). The release notes say
-so; see "Unsigned builds" in the README.
+Installers are **not code-signed** (no Windows certificate, no Apple notarization, by decision). The release
+notes say so; see "Unsigned builds" in the README. In-app update artifacts are signed with a minisign key
+(see "In-app updates").
 
 ## What a release contains
 
@@ -16,7 +17,12 @@ so; see "Unsigned builds" in the README.
 | `Mudrix-<v>-windows-x64.msi` | MSI (stable releases only, see below) |
 | `Mudrix-<v>-macos-universal.dmg` | universal (Apple silicon and Intel) |
 | `Mudrix-<v>-linux-x64.AppImage` / `.deb` / `.rpm` | Linux |
+| `Mudrix-<v>-windows-x64-setup.exe.sig`, `...-macos-universal.app.tar.gz` (+ `.sig`), `...-linux-x64.AppImage.sig` | updater artifacts and minisign signatures |
+| `latest.json` | update manifest read by `tauri-plugin-updater` (windows-x86_64, darwin-aarch64, darwin-x86_64, linux-x86_64) |
 | `SHA256SUMS.txt` | `sha256sum` format, all of the above |
+
+Keep the `Mudrix-<v>-windows-x64-setup.exe` / `-macos-universal.dmg` names and `SHA256SUMS.txt`: installs
+from before the signed updater still use the old updater, which looks for exactly those.
 
 MSI (WiX) only accepts numeric pre-release versions, so pre-release tags build the NSIS installer only
 on Windows.
@@ -39,9 +45,9 @@ on Windows.
    ```
    `node scripts/check-version.mjs` must pass; CI runs it for the tag as well.
 3. `git tag v26.10.3 && git push origin main v26.10.3`.
-4. The workflow checks the version, builds the web client from the submodule, builds the Tauri bundles on
-   Windows, macOS and Linux, renames them to `Mudrix-<v>-<platform>.<ext>`, adds `SHA256SUMS.txt` and
-   publishes the release (a pre-release when the version has a suffix).
+4. The workflow checks the version and the update signing key, builds the web client from the submodule, builds the Tauri bundles on
+   Windows, macOS and Linux, renames them to `Mudrix-<v>-<platform>.<ext>`, writes `latest.json` from the `.sig` files, adds
+   `SHA256SUMS.txt` and publishes the release (a pre-release when the version has a suffix).
 5. Smoke test on a clean profile: install, sign in, receive a notification with the window closed (tray),
    check the unread badge, open a `matrix:` link, quit from the tray.
 
@@ -59,34 +65,66 @@ Output is in `src-tauri/target/release/bundle/`.
 
 ## Secrets
 
-None are required. Everything below is optional.
-
 | secret | used for |
 | --- | --- |
 | `GITHUB_TOKEN` | provided by GitHub, creates the release |
-| `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | signing in-app update artifacts (below) |
+| `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | **required**: signing the in-app update artifacts |
+| `VITE_GIPHY_API_KEY`, `VITE_KLIPY_API_KEY` | optional web client keys |
+
+The release workflow fails in its first job when the two signing secrets are missing or
+`plugins.updater.pubkey` is still the placeholder.
 
 Windows code signing and Apple signing/notarization are intentionally not wired up. If that changes later,
 tauri-action reads `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
 `APPLE_PASSWORD`, `APPLE_TEAM_ID` for macOS and `bundle.windows.signCommand` (or a certificate thumbprint)
 for Windows.
 
+## One-time setup: update signing key
+
+1. Generate the key pair (pick a password; the workflow needs one):
+   ```sh
+   npx tauri signer generate -w ~/.tauri/mudrix-updater.key
+   ```
+   This writes the private key to that file and prints the public key (also saved as `.key.pub`).
+2. Put the public key into `src-tauri/tauri.conf.json` as `plugins.updater.pubkey`, replacing
+   `REPLACE_WITH_OUTPUT_OF_tauri_signer_generate`, and commit it.
+3. In the GitHub repository, Settings > Secrets and variables > Actions, add
+   `TAURI_SIGNING_PRIVATE_KEY` (the contents of the private key file) and
+   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+4. Back the private key up somewhere safe. Installs only accept updates signed by it; if it is lost or
+   changed, existing installs can no longer update in place and users have to reinstall manually.
+
+Local release builds (`npm run desktop:build`) also need `TAURI_SIGNING_PRIVATE_KEY` (and the password) in the
+environment because `bundle.createUpdaterArtifacts` is on. The build script panics for release builds while
+the public key is the placeholder; `MUDRIX_ALLOW_PLACEHOLDER_UPDATER_KEY=1` skips that check (the app then
+logs that updates are disabled and never checks).
+
 ## In-app updates
 
-Updates need no signing key or endpoint. The app (`src-tauri/src/updater.rs`) reads the public
-`https://github.com/kapsikkum/mudrix-desktop/releases.atom` feed at start-up and every six hours (a plain
-web page, so no GitHub API rate limit) and picks the newest stable `vX.Y.Z` tag; pre-release tags are ignored.
-Builds from `tauri dev` and installs with `MUDRIX_NO_UPDATE` set never check.
+`tauri-plugin-updater`, driven from Rust only (`src-tauri/src/updater.rs`; the webview has no updater
+permissions). The app reads `https://github.com/kapsikkum/mudrix-desktop/releases/latest/download/latest.json`
+at start-up and every six hours; GitHub's "latest" ignores pre-releases, so `-next`/`-rc`/`-beta` tags are
+not offered. Builds from `tauri dev` and installs with `MUDRIX_NO_UPDATE` set never check. Every download is
+verified against the minisign signature in `latest.json` and the public key baked into the app.
 
-- **Windows:** downloads `Mudrix-<v>-windows-x64-setup.exe`, verifies it against the release's
-  `SHA256SUMS.txt`, and shows the web app's update toast. "Update now" quits, runs the per-user installer
-  silently (`/S /UPDATE`) and starts the new build.
-- **macOS:** downloads and verifies `Mudrix-<v>-macos-universal.dmg`, then replaces the running `.app` and
-  reopens it (if it is not run from an app bundle the disk image is opened instead).
-- **Linux:** only announces the release (`desktop://update-available`); the toast links to the release page.
+- **Windows:** downloads and verifies the NSIS installer in the background and shows the web app's update
+  toast. "Update now" runs the per-user installer in passive mode (a small progress window, no prompts) and
+  restarts the app.
+- **macOS:** downloads and verifies `Mudrix-<v>-macos-universal.app.tar.gz`, then replaces the app bundle
+  and restarts.
+- **Linux AppImage:** updates in place like the above. **.deb/.rpm:** only announces the release
+  (`desktop://update-available`); the toast links to the release page.
 
-The release workflow must keep these asset names and `SHA256SUMS.txt`. Settings > About has a manual
-"Check for updates" button. Signed updates (`tauri-plugin-updater`) were dropped: builds are unsigned.
+Settings > About has a manual "Check for updates" button. Update progress and failures are appended to
+`update.log` in `<temp dir>/mudrix-update/`.
+
+### Upgrading from builds with the old updater
+
+Installs from before this change still run the old updater (releases.atom feed plus `SHA256SUMS.txt`, silent
+install). It finds the first release that has the new updater as long as the release still contains
+`Mudrix-<v>-windows-x64-setup.exe` / `Mudrix-<v>-macos-universal.dmg` and `SHA256SUMS.txt`, which the
+workflow keeps producing. After that one update they use the signed updater. The first release with the
+signed updater should be a stable `vX.Y.Z` tag (the old updater ignores pre-releases).
 
 ## Rollback
 
@@ -99,5 +137,6 @@ keeps the user's data.
 - A full `tauri build` on each OS (only `cargo check` was run locally).
 - The first end-to-end SSO/OIDC login through the loopback listener against a real homeserver.
 - Windows taskbar overlay, macOS dock badge, `matrix:` handler registration from an installed build.
-- The in-app updater against a real newer release (the Windows silent install and the macOS bundle swap
-  especially); it needs an installed build older than the latest published release to test.
+- The signed updater against a real newer release, including the `latest.json` the workflow writes (the
+  Windows passive install and the macOS bundle swap especially); it needs an installed build older than the
+  latest published release to test.
