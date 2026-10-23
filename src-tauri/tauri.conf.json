@@ -65,7 +65,8 @@
         "section": "net"
       },
       "rpm": {}
-    }
+    },
+    "createUpdaterArtifacts": true
   },
   "plugins": {
     "deep-link": {
@@ -73,6 +74,15 @@
         "schemes": [
           "matrix"
         ]
+      }
+    },
+    "updater": {
+      "pubkey": "REPLACE_WITH_OUTPUT_OF_tauri_signer_generate",
+      "endpoints": [
+        "https://github.com/kapsikkum/mudrix-desktop/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

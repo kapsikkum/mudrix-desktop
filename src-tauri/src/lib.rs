@@ -2,7 +2,7 @@
 //!
 //! Layout: `settings` (persisted shell settings), `tray` (tray icon, menu, unread badge),
 //! `auth` (SSO/OIDC through the system browser), `commands` (what the web app can call),
-//! `badge` (Windows taskbar overlay drawing), `updater` (releases.atom check + installer download).
+//! `badge` (Windows taskbar overlay drawing), `updater` (tauri-plugin-updater, signed updates).
 
 mod accent;
 mod auth;
@@ -37,6 +37,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![AUTOSTART_FLAG]),

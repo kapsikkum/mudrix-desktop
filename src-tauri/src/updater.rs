@@ -1,22 +1,27 @@
-//! In-app updates without a signing service or the GitHub API.
+//! In-app updates through `tauri-plugin-updater`, verified against a minisign signature.
 //!
-//! The release list comes from the repository's public `releases.atom` feed (a plain web
-//! page, so it is not subject to the API's rate limits). On Windows and macOS the matching
-//! installer is downloaded in the background, checked against the release's `SHA256SUMS.txt`
-//! and the web app is told (`desktop://update-ready`); installing restarts the app. Linux only
-//! gets `desktop://update-available` so the web app can point at the download page.
+//! The plugin reads `latest.json` from the latest GitHub release (see `plugins.updater` in
+//! `tauri.conf.json`) and refuses any download that is not signed by the key whose public half is
+//! baked into the app. It is only driven from Rust: the webview has no updater permissions and
+//! talks to this module through `check_for_updates` / `install_update` and the
+//! `desktop://update-ready` / `desktop://update-available` events.
+//!
+//! * Windows, macOS and Linux AppImage: the update is downloaded and verified in the background,
+//!   the web app is told (`desktop://update-ready`), and installing restarts the app.
+//! * Linux .deb/.rpm cannot be replaced in place, so they only get `desktop://update-available`
+//!   with the release page.
 
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_updater::{Update, UpdaterExt};
 
 const REPO: &str = "kapsikkum/mudrix-desktop";
 const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
-const CURRENT: &str = env!("CARGO_PKG_VERSION");
+const KEY_PLACEHOLDER: &str = "REPLACE_WITH";
 
 #[derive(Clone, Serialize)]
 pub struct UpdateInfo {
@@ -24,15 +29,18 @@ pub struct UpdateInfo {
     pub url: String,
 }
 
+/// A downloaded, signature-verified update waiting for the user to restart.
 struct Ready {
-    version: String,
-    installer: PathBuf,
+    update: Update,
+    bytes: Vec<u8>,
 }
 
 #[derive(Default)]
 pub struct UpdateState {
     ready: Mutex<Option<Ready>>,
     announced: Mutex<Option<String>>,
+    /// Serialises the background and manual checks so they never download twice.
+    checking: tokio::sync::Mutex<()>,
 }
 
 /// Result of a manual check, reported to the web app as a string.
@@ -51,17 +59,34 @@ pub fn spawn(app: &AppHandle) {
     if cfg!(debug_assertions) || std::env::var_os("MUDRIX_NO_UPDATE").is_some() {
         return;
     }
+    if let Err(reason) = configured(app) {
+        log(&format!("updates disabled: {reason}"));
+        return;
+    }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         loop {
             let _ = check(&app).await;
-            tokio_sleep(CHECK_EVERY).await;
+            tokio::time::sleep(CHECK_EVERY).await;
         }
     });
 }
 
-async fn tokio_sleep(d: Duration) {
-    let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(d)).await;
+/// The updater is only usable once a real public key replaced the placeholder in the config.
+fn configured(app: &AppHandle) -> Result<(), String> {
+    let pubkey = app
+        .config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|c| c.get("pubkey"))
+        .and_then(|k| k.as_str())
+        .unwrap_or_default();
+    if pubkey.is_empty() || pubkey.contains(KEY_PLACEHOLDER) {
+        Err("plugins.updater.pubkey is not set (see RELEASING.md)".into())
+    } else {
+        Ok(())
+    }
 }
 
 /// Where update progress and failures are recorded, for diagnosing "update failed" reports.
@@ -90,11 +115,13 @@ fn log(msg: &str) {
     }
 }
 
-fn client() -> Result<reqwest::Client, reqwest::Error> {
-    reqwest::Client::builder()
-        .user_agent(format!("Mudrix-Desktop/{CURRENT}"))
-        .timeout(Duration::from_secs(300))
-        .build()
+/// Whether this install can replace itself. Linux packages (.deb/.rpm) cannot; an AppImage can.
+fn can_install() -> bool {
+    cfg!(any(windows, target_os = "macos")) || std::env::var_os("APPIMAGE").is_some()
+}
+
+fn release_page(version: &str) -> String {
+    format!("https://github.com/{REPO}/releases/tag/v{version}")
 }
 
 pub async fn check(app: &AppHandle) -> CheckStatus {
@@ -108,72 +135,32 @@ pub async fn check(app: &AppHandle) -> CheckStatus {
 }
 
 async fn check_inner(app: &AppHandle) -> Result<CheckStatus, Box<dyn std::error::Error>> {
+    configured(app)?;
     let state = app.state::<UpdateState>();
+    let _guard = state.checking.lock().await;
     if state.ready.lock().unwrap().is_some() {
         return Ok(CheckStatus::Ready);
     }
-    let client = client()?;
-    let feed = client
-        .get(format!("https://github.com/{REPO}/releases.atom"))
-        .send()
-        .await?
-        .error_for_status()?
-        .text()
-        .await?;
-    let Some(tag) = newest_stable(&parse_atom_tags(&feed)) else {
+
+    let Some(update) = app.updater()?.check().await? else {
         return Ok(CheckStatus::UpToDate);
     };
-    let version = tag.trim_start_matches('v').to_string();
-    if parse_version(&version) <= parse_version(CURRENT) {
-        return Ok(CheckStatus::UpToDate);
-    }
-    let page = format!("https://github.com/{REPO}/releases/tag/{tag}");
-    log(&format!("update found: {CURRENT} -> {version}"));
+    let version = update.version.clone();
+    let page = release_page(&version);
+    log(&format!(
+        "update found: {} -> {version}",
+        update.current_version
+    ));
 
-    let Some(asset) = asset_name(&version) else {
+    if !can_install() {
         announce(app, &version, &page, "desktop://update-available");
         return Ok(CheckStatus::Available);
-    };
-
-    let base = format!("https://github.com/{REPO}/releases/download/{tag}");
-    let sums = client
-        .get(format!("{base}/SHA256SUMS.txt"))
-        .send()
-        .await?
-        .error_for_status()?
-        .text()
-        .await?;
-    let expected = checksum_for(&sums, &asset).ok_or("installer missing from SHA256SUMS.txt")?;
-
-    let dir = std::env::temp_dir().join("mudrix-update");
-    std::fs::create_dir_all(&dir)?;
-    let path = dir.join(&asset);
-    let mut response = client
-        .get(format!("{base}/{asset}"))
-        .send()
-        .await?
-        .error_for_status()?;
-    let mut hasher = Sha256::new();
-    let mut file = std::fs::File::create(&path)?;
-    while let Some(chunk) = response.chunk().await? {
-        hasher.update(&chunk);
-        file.write_all(&chunk)?;
-    }
-    drop(file);
-    let actual = hex(&hasher.finalize());
-    if !actual.eq_ignore_ascii_case(&expected) {
-        let _ = std::fs::remove_file(&path);
-        return Err(format!(
-            "downloaded installer failed its checksum (got {actual}, expected {expected})"
-        )
-        .into());
     }
 
-    log(&format!("downloaded and verified {}", path.display()));
-    *state.ready.lock().unwrap() = Some(Ready {
-        version: version.clone(),
-        installer: path,
-    });
+    // The plugin verifies the minisign signature while downloading and fails on a mismatch.
+    let bytes = update.download(|_, _| {}, || {}).await?;
+    log(&format!("downloaded and verified {version}"));
+    *state.ready.lock().unwrap() = Some(Ready { update, bytes });
     announce(app, &version, &page, "desktop://update-ready");
     Ok(CheckStatus::Ready)
 }
@@ -195,133 +182,22 @@ fn announce(app: &AppHandle, version: &str, url: &str, event: &str) {
     );
 }
 
+/// Install the downloaded update and restart. On Windows the installer (passive mode, with a
+/// progress window) ends this process itself.
 pub fn install(app: &AppHandle) {
     let ready = app.state::<UpdateState>().ready.lock().unwrap().take();
     let Some(ready) = ready else { return };
-    match launch_installer(&ready.installer) {
+    match ready.update.install(&ready.bytes) {
         Ok(()) => {
-            log(&format!("installing update {}", ready.version));
-            app.exit(0);
+            log(&format!("installed update {}", ready.update.version));
+            app.restart();
         }
-        Err(e) => log(&format!("update install failed: {e}")),
-    }
-}
-
-#[cfg(windows)]
-fn launch_installer(installer: &Path) -> std::io::Result<()> {
-    use std::os::windows::process::CommandExt;
-    const DETACHED_PROCESS: u32 = 0x0000_0008;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let exe = std::env::current_exe()?;
-    // Wait for this process to exit, run the per-user NSIS installer silently in update mode,
-    // then start the new build.
-    let script = format!(
-        "ping -n 3 127.0.0.1 >nul & start /wait \"\" \"{}\" /S /UPDATE & echo installer exit code %errorlevel% >> \"{}\" & start \"\" \"{}\"",
-        installer.display(),
-        log_path().display(),
-        exe.display()
-    );
-    std::process::Command::new("cmd")
-        .raw_arg("/C")
-        .raw_arg(format!("\"{script}\""))
-        .creation_flags(DETACHED_PROCESS | CREATE_NO_WINDOW)
-        .spawn()
-        .map(|_| ())
-}
-
-#[cfg(target_os = "macos")]
-fn launch_installer(dmg: &Path) -> std::io::Result<()> {
-    // current_exe is <App>.app/Contents/MacOS/Mudrix
-    let bundle = std::env::current_exe()?
-        .ancestors()
-        .nth(3)
-        .map(Path::to_path_buf)
-        .filter(|p| p.extension().is_some_and(|e| e == "app"));
-    let Some(bundle) = bundle else {
-        // Not running from an app bundle: hand the disk image to the user.
-        return std::process::Command::new("open")
-            .arg(dmg)
-            .spawn()
-            .map(|_| ());
-    };
-    // Files fetched by this process carry no quarantine flag, so the copied app opens normally.
-    let script = r#"sleep 2
-mnt=$(mktemp -d)
-if hdiutil attach -nobrowse -quiet -mountpoint "$mnt" "$DMG"; then
-  src=$(ls -d "$mnt"/*.app | head -n 1)
-  if [ -n "$src" ] && rm -rf "$APP.new" && cp -R "$src" "$APP.new" && rm -rf "$APP" && mv "$APP.new" "$APP"; then
-    xattr -dr com.apple.quarantine "$APP" 2>/dev/null
-  fi
-  hdiutil detach -quiet "$mnt"
-fi
-open "$APP""#;
-    std::process::Command::new("sh")
-        .arg("-c")
-        .arg(script)
-        .env("DMG", dmg)
-        .env("APP", bundle)
-        .spawn()
-        .map(|_| ())
-}
-
-#[cfg(not(any(windows, target_os = "macos")))]
-fn launch_installer(_installer: &Path) -> std::io::Result<()> {
-    Err(std::io::Error::other("no installer for this platform"))
-}
-
-/// Installer file for this platform, or None where updates are announced rather than applied.
-fn asset_name(version: &str) -> Option<String> {
-    if cfg!(windows) {
-        Some(format!("Mudrix-{version}-windows-x64-setup.exe"))
-    } else if cfg!(target_os = "macos") {
-        Some(format!("Mudrix-{version}-macos-universal.dmg"))
-    } else {
-        None
-    }
-}
-
-fn parse_atom_tags(xml: &str) -> Vec<String> {
-    const NEEDLE: &str = "/releases/tag/";
-    let mut tags = Vec::new();
-    let mut rest = xml;
-    while let Some(i) = rest.find(NEEDLE) {
-        rest = &rest[i + NEEDLE.len()..];
-        let end = rest.find(['"', '<', '\'']).unwrap_or(rest.len());
-        let tag = &rest[..end];
-        if !tag.is_empty() && !tags.iter().any(|t| t == tag) {
-            tags.push(tag.to_string());
+        Err(e) => {
+            log(&format!("update install failed: {e}"));
+            // Keep it so the user can try again.
+            *app.state::<UpdateState>().ready.lock().unwrap() = Some(ready);
         }
     }
-    tags
-}
-
-/// `26.10.6` -> (26, 10, 6). Anything else (pre-release suffixes, extra parts) is not stable.
-fn parse_version(v: &str) -> Option<(u64, u64, u64)> {
-    let mut parts = v.trim_start_matches('v').split('.');
-    let out = (
-        parts.next()?.parse().ok()?,
-        parts.next()?.parse().ok()?,
-        parts.next()?.parse().ok()?,
-    );
-    parts.next().is_none().then_some(out)
-}
-
-fn newest_stable(tags: &[String]) -> Option<String> {
-    tags.iter()
-        .filter_map(|t| parse_version(t).map(|v| (v, t)))
-        .max_by_key(|(v, _)| *v)
-        .map(|(_, t)| t.clone())
-}
-
-fn checksum_for(sums: &str, name: &str) -> Option<String> {
-    sums.lines().find_map(|line| {
-        let (hash, file) = line.split_once(char::is_whitespace)?;
-        (file.trim().trim_start_matches('*') == name).then(|| hash.to_string())
-    })
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 #[cfg(test)]
@@ -329,28 +205,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn picks_newest_stable_tag_from_feed() {
-        let feed = r#"<link rel="alternate" href="https://github.com/o/r/releases/tag/v26.10.2-next.1"/>
-            <link href="https://github.com/o/r/releases/tag/v26.10.10"/>
-            <link href="https://github.com/o/r/releases/tag/v26.10.9"/>"#;
-        let tags = parse_atom_tags(feed);
-        assert_eq!(newest_stable(&tags).as_deref(), Some("v26.10.10"));
-    }
-
-    #[test]
-    fn versions_compare_numerically() {
-        assert!(parse_version("26.10.10") > parse_version("26.10.9"));
-        assert_eq!(parse_version("26.10.3-next.1"), None);
-    }
-
-    #[test]
-    fn finds_checksum_with_binary_marker() {
-        let sums = "abc123  Mudrix-1.0.0-windows-x64-setup.exe\ndef456 *other.dmg\n";
+    fn release_page_points_at_the_tag() {
         assert_eq!(
-            checksum_for(sums, "Mudrix-1.0.0-windows-x64-setup.exe").as_deref(),
-            Some("abc123")
+            release_page("26.10.16"),
+            "https://github.com/kapsikkum/mudrix-desktop/releases/tag/v26.10.16"
         );
-        assert_eq!(checksum_for(sums, "other.dmg").as_deref(), Some("def456"));
-        assert_eq!(checksum_for(sums, "missing"), None);
+    }
+
+    #[test]
+    fn placeholder_marker_is_stable() {
+        // tauri.conf.json and build.rs use the same marker.
+        assert!("REPLACE_WITH_OUTPUT_OF_tauri_signer_generate".contains(KEY_PLACEHOLDER));
     }
 }
