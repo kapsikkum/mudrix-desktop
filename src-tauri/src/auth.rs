@@ -30,6 +30,8 @@ const DONE_PAGE: &str = "<!doctype html><html><head><meta charset=\"utf-8\"><tit
 background:#1a1b1e;color:#e8e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;\
 font-size:18px}</style></head><body>You are signed in. You can close this tab and return to Mudrix.</body></html>";
 
+const ERROR_PAGE: &str = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Mudrix</title><style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#1a1b1e;color:#e8e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:18px}</style></head><body>This sign-in link is not valid. Close this tab and try signing in again from Mudrix.</body></html>";
+
 struct Listener {
     port: u16,
     nonce: String,
@@ -130,7 +132,7 @@ fn handle(app: &AppHandle, mut stream: TcpStream, port: u16) {
     );
     let host_ok = host == format!("127.0.0.1:{port}") || host == format!("localhost:{port}");
     let Ok(url) = Url::parse(&format!("http://127.0.0.1:{port}{target}")) else {
-        return respond(stream, "400 Bad Request", DONE_PAGE);
+        return respond(stream, "400 Bad Request", ERROR_PAGE);
     };
 
     let has = |key: &str| url.query_pairs().any(|(k, _)| k == key);
@@ -139,13 +141,16 @@ fn handle(app: &AppHandle, mut stream: TcpStream, port: u16) {
         .find(|(k, _)| k == NONCE_PARAM)
         .map(|(_, v)| v.into_owned());
     let expected = ACTIVE.lock().unwrap().as_ref().map(|l| l.nonce.clone());
-    // SSO callbacks carry the nonce we put in; OIDC callbacks (fixed redirect URI) do not.
-    let nonce_ok = nonce.is_none() || nonce == expected;
-
     let is_sso = has("loginToken");
+    // SSO callbacks must carry the nonce we put in; OIDC callbacks (fixed redirect URI) do not.
+    let nonce_ok = if is_sso {
+        nonce.is_some() && nonce == expected
+    } else {
+        nonce.is_none() || nonce == expected
+    };
     let is_oidc = has("code") || has("error");
     if method != "GET" || !host_ok || !nonce_ok || !(is_sso || is_oidc) {
-        return respond(stream, "400 Bad Request", DONE_PAGE);
+        return respond(stream, "400 Bad Request", ERROR_PAGE);
     }
 
     // Everything except our own nonce goes on to the web app.
@@ -183,6 +188,11 @@ pub fn open_in_browser(app: &AppHandle, raw: &str) -> Result<(), String> {
         .query_pairs()
         .find(|(k, _)| k == "redirectUrl")
         .map(|(_, v)| v.into_owned());
+    if redirect.is_none() && port != OIDC_PORT {
+        return Err(format!(
+            "the login callback port {OIDC_PORT} is in use by another program"
+        ));
+    }
     if let Some(redirect) = redirect {
         let carried: Vec<(String, String)> = Url::parse(&redirect)
             .map(|r| {
