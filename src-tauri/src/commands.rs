@@ -232,11 +232,37 @@ fn sanitize_file_name(raw: &str) -> String {
         })
         .collect();
     let name = name.trim().trim_matches('.').to_string();
+    let name = if is_reserved_device_name(&name) {
+        format!("_{name}")
+    } else {
+        name
+    };
+    // Windows drops trailing spaces and dots, so don't leave any.
+    let name = name.trim_end_matches([' ', '.']).to_string();
     if name.is_empty() {
         "download".to_string()
     } else {
         name
     }
+}
+
+/// `CON`, `NUL`, `COM1`... are devices on Windows, with or without an extension.
+fn is_reserved_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or("").trim_end();
+    let upper = stem.to_ascii_uppercase();
+    matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ((upper.starts_with("COM") || upper.starts_with("LPT"))
+            && upper.len() == 4
+            && matches!(upper.as_bytes()[3], b'1'..=b'9'))
+}
+
+/// Mark the file as downloaded from the internet (Mark of the Web) so SmartScreen and Office
+/// protections apply. Best effort; filesystems without alternate data streams just fail.
+#[cfg(windows)]
+fn mark_downloaded(path: &std::path::Path) {
+    let mut stream = path.as_os_str().to_os_string();
+    stream.push(":Zone.Identifier");
+    let _ = std::fs::write(stream, "[ZoneTransfer]RNZoneId=3RN".replace("RN", "\r\n"));
 }
 
 /// Picks `name`, `name (1).ext`, `name (2).ext`... so an existing file is never overwritten.
@@ -285,6 +311,8 @@ pub fn save_download(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = unique_path(&dir, &sanitize_file_name(&decoded));
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    mark_downloaded(&path);
     Ok(path.to_string_lossy().into_owned())
 }
 
@@ -361,6 +389,23 @@ mod download_tests {
         assert_eq!(sanitize_file_name("a/b:c?.txt"), "b_c_.txt");
         assert_eq!(sanitize_file_name("   "), "download");
         assert_eq!(sanitize_file_name("..."), "download");
+    }
+
+    #[test]
+    fn windows_device_names_are_prefixed() {
+        assert_eq!(sanitize_file_name("CON"), "_CON");
+        assert_eq!(sanitize_file_name("nul.txt"), "_nul.txt");
+        assert_eq!(sanitize_file_name("Com1.tar.gz"), "_Com1.tar.gz");
+        assert_eq!(sanitize_file_name("lpt9"), "_lpt9");
+        assert_eq!(sanitize_file_name("COM0"), "COM0");
+        assert_eq!(sanitize_file_name("console.txt"), "console.txt");
+        assert_eq!(sanitize_file_name("aux .txt"), "_aux .txt");
+    }
+
+    #[test]
+    fn trailing_spaces_and_dots_are_removed() {
+        assert_eq!(sanitize_file_name("report. . "), "report");
+        assert_eq!(sanitize_file_name("a.txt "), "a.txt");
     }
 
     #[test]
