@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "screenshare-bar",
+  "description": "The screen share bar window. It only calls the app's own screen_share_bar_stop and screen_share_bar_return commands. App commands are not gated by plugin permissions (there is no app manifest), so this only grants the event API.",
+  "windows": ["screenshare-bar"],
+  "permissions": ["core:event:default"]
+}

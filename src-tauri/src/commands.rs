@@ -8,6 +8,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt as _;
+#[cfg(not(windows))]
 use tauri_plugin_notification::NotificationExt as _;
 use tauri_plugin_opener::OpenerExt as _;
 use tauri_plugin_window_state::{AppHandleExt as _, StateFlags};
@@ -201,11 +202,19 @@ pub fn show_notification(
     title: String,
     body: String,
     room_url: Option<String>,
+    // The sender's avatar as PNG bytes; Windows shows it in place of the app icon.
+    icon: Option<Vec<u8>>,
 ) -> Result<(), String> {
     if settings::get(&app).notifications_muted {
         return Ok(());
     }
     let body: String = body.chars().take(240).collect();
+    // Windows: the plugin would label an unpacked/dev build "Windows PowerShell" (see `toast`).
+    #[cfg(windows)]
+    crate::toast::show(&app, &title, &body, icon.as_deref())?;
+    #[cfg(not(windows))]
+    let _ = icon;
+    #[cfg(not(windows))]
     app.notification()
         .builder()
         .title(title)
