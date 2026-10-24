@@ -38,6 +38,10 @@ jobs:
             package-lock.json
             mudrix-web/package-lock.json
 
+      # Element Call is built from our fork (the mudrix-web/element-call submodule) with pnpm.
+
+      - run: corepack enable pnpm
+
       - run: npm ci
       - run: node scripts/check-version.mjs
 
