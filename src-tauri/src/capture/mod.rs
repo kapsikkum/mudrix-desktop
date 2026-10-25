@@ -37,6 +37,7 @@ use serde::Serialize;
 use tauri::AppHandle;
 
 /// The event the main window hears when a capture ends, whatever the reason.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub const ENDED_EVENT: &str = "capture-ended";
 
 /// One monitor or window the user can share.
@@ -70,6 +71,7 @@ pub struct CaptureStarted {
 }
 
 /// Payload of [`ENDED_EVENT`].
+#[cfg_attr(not(windows), allow(dead_code))]
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureEnded {
@@ -80,6 +82,7 @@ pub struct CaptureEnded {
 }
 
 /// Why a capture ended.
+#[cfg_attr(not(windows), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EndReason {
     /// `capture_stop`, a new capture, or the app closing.
@@ -90,6 +93,7 @@ pub enum EndReason {
 }
 
 impl EndReason {
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub fn as_str(self) -> &'static str {
         match self {
             EndReason::Stopped => "stopped",
