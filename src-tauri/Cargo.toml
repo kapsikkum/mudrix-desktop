@@ -38,11 +38,14 @@ webview2-com = "0.39"
 # and the native screen/window capture (src/capture: Windows.Graphics.Capture, D3D11, WASAPI).
 windows = { version = "0.62", features = [
     "Foundation",
+    "Foundation_Collections",
     "Foundation_Metadata",
     "Graphics",
     "Graphics_Capture",
     "Graphics_DirectX",
     "Graphics_DirectX_Direct3D11",
+    "Media",
+    "Media_Control",
     "Win32_Foundation",
     "Win32_Graphics_Direct3D",
     "Win32_Graphics_Direct3D11",

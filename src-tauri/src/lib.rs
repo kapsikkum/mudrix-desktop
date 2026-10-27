@@ -5,9 +5,11 @@
 //! `badge` (Windows taskbar overlay drawing), `updater` (tauri-plugin-updater, signed updates),
 //! `screenshare` (our screen share bar in place of the one WebView2 draws), `toast` (Windows
 //! toasts under our own app id, so they say "Mudrix"), `capture` (native screen and window
-//! capture for screen sharing, in place of WebView2's picker).
+//! capture for screen sharing, in place of WebView2's picker), `activity` (the game or music
+//! playing, for the profile's "Playing X" line; only runs when the user switches it on).
 
 mod accent;
+mod activity;
 mod auth;
 mod badge;
 mod capture;
@@ -60,6 +62,7 @@ pub fn run() {
             app.manage(settings::SettingsState(Mutex::new(loaded)));
             app.manage(commands::NavState::default());
             app.manage(commands::LastNotification::default());
+            activity::init(&handle);
 
             #[cfg(windows)]
             toast::init(&handle);
@@ -139,6 +142,8 @@ pub fn run() {
             capture::capture_list_sources,
             capture::capture_start,
             capture::capture_stop,
+            activity::set_activity_detection,
+            activity::get_activity,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the Mudrix desktop app");
