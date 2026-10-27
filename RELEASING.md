@@ -103,7 +103,7 @@ logs that updates are disabled and never checks).
 
 `tauri-plugin-updater`, driven from Rust only (`src-tauri/src/updater.rs`; the webview has no updater
 permissions). The app reads `https://github.com/kapsikkum/mudrix-desktop/releases/latest/download/latest.json`
-at start-up and every six hours; GitHub's "latest" ignores pre-releases, so `-next`/`-rc`/`-beta` tags are
+at start-up and every hour; GitHub's "latest" ignores pre-releases, so `-next`/`-rc`/`-beta` tags are
 not offered. Builds from `tauri dev` and installs with `MUDRIX_NO_UPDATE` set never check. Every download is
 verified against the minisign signature in `latest.json` and the public key baked into the app.
 

@@ -20,7 +20,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 const REPO: &str = "kapsikkum/mudrix-desktop";
-const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
+const CHECK_EVERY: Duration = Duration::from_secs(60 * 60);
 const KEY_PLACEHOLDER: &str = "REPLACE_WITH";
 
 #[derive(Clone, Serialize)]
