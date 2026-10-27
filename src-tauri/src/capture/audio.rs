@@ -600,7 +600,7 @@ mod tests {
         let _com = ComGuard::mta();
         let spec = buffer_spec();
         let mut ring = Ring::new(SharedView::for_test(spec.size));
-        let mut source = Loopback::open().expect("no loopback source");
+        let mut source = Loopback::open(AudioTarget::AllButUs).expect("no loopback source");
         println!("source: {}", source.describe());
         let stop = Arc::new(AtomicBool::new(false));
         let flag = stop.clone();
