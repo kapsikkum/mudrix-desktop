@@ -227,14 +227,36 @@ impl Detector {
 
     #[cfg(windows)]
     fn game_name(&mut self, process: &scan::WindowedProcess) -> Option<String> {
-        if let Some(name) = classify::curated_name(&process.exe_file, &process.titles) {
+        // 1. Curated list / Discord detectable database match (includes generic runner window title checks)
+        if let Some(name) = classify::curated_name(&process.exe_file, &process.path, &process.titles) {
             return Some(name.to_string());
         }
-        let game = classify::installed_game(&process.path)?;
-        Some(match &game.steamapps {
-            Some(steamapps) => self.steam.name(steamapps, &game.folder),
-            None => game.folder,
-        })
+
+        // 2. Installed in a known launcher library (Steam, Epic, GOG, EA, Xbox, etc.)
+        if let Some(game) = classify::installed_game(&process.path) {
+            if let Some(steamapps) = &game.steamapps {
+                if let Some(appid) = classify::active_steam_appid() {
+                    if let Some(name) = self.steam.name_by_appid(steamapps, appid) {
+                        return Some(name);
+                    }
+                }
+                return Some(self.steam.name(steamapps, &game.folder));
+            }
+            // For Epic, GOG, EA, Ubisoft, Xbox: prefer clean PE Product Name over raw directory name
+            if let Some(pe_name) = classify::pe_product_name(&process.path) {
+                return Some(pe_name);
+            }
+            return Some(game.folder);
+        }
+
+        // 3. Standalone game or installed in custom directory
+        if classify::is_likely_game_path(&process.path) {
+            if let Some(pe_name) = classify::pe_product_name(&process.path) {
+                return Some(pe_name);
+            }
+        }
+
+        None
     }
 
     #[cfg(windows)]
@@ -296,6 +318,12 @@ impl SteamNames {
             .get(steamapps)
             .and_then(|(_, names)| names.get(&key).cloned())
             .unwrap_or_else(|| folder.to_string())
+    }
+
+    fn name_by_appid(&self, steamapps: &str, appid: u32) -> Option<String> {
+        let path = format!("{}/appmanifest_{}.acf", steamapps, appid);
+        let text = std::fs::read_to_string(&path).ok()?;
+        classify::parse_manifest_name(&text)
     }
 }
 
