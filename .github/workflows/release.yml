@@ -88,6 +88,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          # Full history: the release notes are built from the mudrix-web commits since its last tag.
+          fetch-depth: 0
 
       - name: Linux system libraries for Tauri
         if: matrix.platform == 'ubuntu-22.04'
@@ -117,6 +119,15 @@ jobs:
       - run: corepack enable pnpm
 
       - run: npm ci
+
+      # The "What's new" dialog reads mudrix-web/whatsnew/<version>.md, which is generated from the
+      # commits (feat/fix/perf) and is not committed. Needs the web repo's tags, which a submodule
+      # checkout does not fetch. A failure here only means the app has no notes for this release.
+      - name: Write the release notes
+        shell: bash
+        run: |
+          git -C mudrix-web fetch --tags --force --unshallow origin 2>/dev/null || git -C mudrix-web fetch --tags --force origin || true
+          (cd mudrix-web && node scripts/release-notes.mjs "${{ needs.prepare.outputs.version }}") || echo "::warning::could not write the release notes"
 
       # MSI (WiX) only accepts numeric pre-release versions, so a -next/-rc/-beta tag builds
       # the NSIS installer only on Windows.
