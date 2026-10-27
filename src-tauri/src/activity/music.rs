@@ -22,15 +22,28 @@ pub struct Track {
 
 /// Parts of the source app's id that mean "a web browser".
 const BROWSERS: &[&str] = &[
-    "chrome", "msedge", "edge", "firefox", "brave", "opera", "vivaldi", "iexplore", "librewolf",
-    "waterfox", "zen", "arc",
+    "chrome",
+    "msedge",
+    "edge",
+    "firefox",
+    "brave",
+    "opera",
+    "vivaldi",
+    "iexplore",
+    "librewolf",
+    "waterfox",
+    "zen",
+    "arc",
     // Firefox reports its install id instead of a name.
     "308046b0af4a39cb",
 ];
 
 fn id_has_word(app_id: &str, words: &[&str]) -> bool {
     let id = app_id.to_lowercase();
-    words.iter().any(|w| id.split(|c: char| !c.is_ascii_alphanumeric()).any(|part| part == *w))
+    words.iter().any(|w| {
+        id.split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|part| part == *w)
+    })
 }
 
 fn is_browser(app_id: &str) -> bool {
@@ -39,17 +52,59 @@ fn is_browser(app_id: &str) -> bool {
 
 /// Players and apps whose "track" is a film, episode or file name: never shared.
 const VIDEO_APPS: &[&str] = &[
-    "vlc", "mpc", "mpchc", "mpchc64", "mpv", "potplayer", "potplayermini", "kmplayer", "gom",
-    "smplayer", "mplayer", "wmplayer", "zunevideo", "movies", "netflix", "plex", "disney",
-    "primevideo", "hulu", "crunchyroll", "twitch", "obs", "kodi", "jellyfin", "emby", "stremio",
-    "youtube", "videos", "video",
+    "vlc",
+    "mpc",
+    "mpchc",
+    "mpchc64",
+    "mpv",
+    "potplayer",
+    "potplayermini",
+    "kmplayer",
+    "gom",
+    "smplayer",
+    "mplayer",
+    "wmplayer",
+    "zunevideo",
+    "movies",
+    "netflix",
+    "plex",
+    "disney",
+    "primevideo",
+    "hulu",
+    "crunchyroll",
+    "twitch",
+    "obs",
+    "kodi",
+    "jellyfin",
+    "emby",
+    "stremio",
+    "youtube",
+    "videos",
+    "video",
 ];
 
 /// Music apps trusted even when their session does not say what type it is.
 const MUSIC_APPS: &[&str] = &[
-    "spotify", "applemusic", "itunes", "zunemusic", "music", "foobar2000", "musicbee", "aimp",
-    "winamp", "tidal", "deezer", "amazonmusic", "plexamp", "ytmdesktop", "youtubemusic",
-    "pulsar", "strawberry", "qobuz", "groove", "mediamonkey",
+    "spotify",
+    "applemusic",
+    "itunes",
+    "zunemusic",
+    "music",
+    "foobar2000",
+    "musicbee",
+    "aimp",
+    "winamp",
+    "tidal",
+    "deezer",
+    "amazonmusic",
+    "plexamp",
+    "ytmdesktop",
+    "youtubemusic",
+    "pulsar",
+    "strawberry",
+    "qobuz",
+    "groove",
+    "mediamonkey",
 ];
 
 fn is_video_app(app_id: &str) -> bool {
@@ -131,25 +186,49 @@ mod tests {
         assert!(is_browser("MSEdge"));
         assert!(is_browser("308046B0AF4A39CB"));
         assert!(!is_browser("Spotify.exe"));
-        assert!(!is_browser("Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic"));
+        assert!(!is_browser(
+            "Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic"
+        ));
     }
 
     #[test]
     fn video_players_never_count() {
-        for app in ["vlc.exe", "VLC", "org.videolan.vlc", "MPC-HC64.exe", "mpv.exe", "Microsoft.ZuneVideo_8wekyb3d8bbwe!Microsoft.ZuneVideo"] {
+        for app in [
+            "vlc.exe",
+            "VLC",
+            "org.videolan.vlc",
+            "MPC-HC64.exe",
+            "mpv.exe",
+            "Microsoft.ZuneVideo_8wekyb3d8bbwe!Microsoft.ZuneVideo",
+        ] {
             assert!(is_video_app(app), "{app}");
-            assert!(!counts_as_music(app, Some(MediaPlaybackType::Music)), "{app}");
+            assert!(
+                !counts_as_music(app, Some(MediaPlaybackType::Music)),
+                "{app}"
+            );
             assert!(!counts_as_music(app, None), "{app}");
         }
     }
 
     #[test]
     fn music_needs_a_music_type_or_a_known_music_app() {
-        assert!(counts_as_music("Spotify.exe", Some(MediaPlaybackType::Music)));
+        assert!(counts_as_music(
+            "Spotify.exe",
+            Some(MediaPlaybackType::Music)
+        ));
         assert!(counts_as_music("Spotify.exe", None));
-        assert!(counts_as_music("SomeNewPlayer.exe", Some(MediaPlaybackType::Music)));
+        assert!(counts_as_music(
+            "SomeNewPlayer.exe",
+            Some(MediaPlaybackType::Music)
+        ));
         assert!(!counts_as_music("SomeNewPlayer.exe", None));
-        assert!(!counts_as_music("Spotify.exe", Some(MediaPlaybackType::Video)));
-        assert!(counts_as_music("Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic", None));
+        assert!(!counts_as_music(
+            "Spotify.exe",
+            Some(MediaPlaybackType::Video)
+        ));
+        assert!(counts_as_music(
+            "Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic",
+            None
+        ));
     }
 }

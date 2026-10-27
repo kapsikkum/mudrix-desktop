@@ -40,7 +40,9 @@ fn normalise_path(path: &str) -> String {
 fn catalog() -> &'static Catalog {
     static CATALOG: OnceLock<Catalog> = OnceLock::new();
     CATALOG.get_or_init(|| {
-        let entries: Vec<Entry> = serde_json::from_str(include_str!(concat!(env!("OUT_DIR"), "/games.min.json"))).unwrap_or_default();
+        let entries: Vec<Entry> =
+            serde_json::from_str(include_str!(concat!(env!("OUT_DIR"), "/games.min.json")))
+                .unwrap_or_default();
         let mut by_exe: HashMap<String, Vec<(usize, Option<String>)>> = HashMap::new();
         for (i, entry) in entries.iter().enumerate() {
             for exe in &entry.exes {
@@ -51,9 +53,10 @@ fn catalog() -> &'static Catalog {
                 }
                 let exe = normalise_path(exe);
                 match exe.rsplit_once('/') {
-                    Some((_, file)) => {
-                        by_exe.entry(file.to_string()).or_default().push((i, Some(exe.clone())))
-                    }
+                    Some((_, file)) => by_exe
+                        .entry(file.to_string())
+                        .or_default()
+                        .push((i, Some(exe.clone()))),
                     None => by_exe.entry(exe).or_default().push((i, None)),
                 }
             }
@@ -77,7 +80,10 @@ pub fn curated_name(exe_file: &str, path: &str, titles: &[String]) -> Option<&'s
         let title_ok = entry.titles.is_empty()
             || titles.iter().any(|title| {
                 let title = title.trim().to_lowercase();
-                entry.titles.iter().any(|want| title.starts_with(&want.to_lowercase()))
+                entry
+                    .titles
+                    .iter()
+                    .any(|want| title.starts_with(&want.to_lowercase()))
             });
         title_ok.then_some(entry.name.as_str())
     })
@@ -85,9 +91,28 @@ pub fn curated_name(exe_file: &str, path: &str, titles: &[String]) -> Option<&'s
 
 /// Exe names that are never the game itself.
 const HELPER_WORDS: &[&str] = &[
-    "crash", "handler", "redist", "setup", "install", "unins", "dxsetup", "helper", "updater",
-    "bootstrap", "prereq", "easyanticheat", "battleye", "anticheat", "launcher", "dotnet",
-    "cefsharp", "overlay", "benchmark", "report", "diagnostic", "configtool",
+    "crash",
+    "handler",
+    "redist",
+    "setup",
+    "install",
+    "unins",
+    "dxsetup",
+    "helper",
+    "updater",
+    "bootstrap",
+    "prereq",
+    "easyanticheat",
+    "battleye",
+    "anticheat",
+    "launcher",
+    "dotnet",
+    "cefsharp",
+    "overlay",
+    "benchmark",
+    "report",
+    "diagnostic",
+    "configtool",
 ];
 
 /// Folders under a launcher's library that are tools or runtimes, not games.
@@ -171,7 +196,8 @@ pub fn pe_product_name(path: &str) -> Option<String> {
             && !trans_ptr.is_null()
             && trans_len >= 4
         {
-            let slice = std::slice::from_raw_parts(trans_ptr as *const u16, (trans_len / 2) as usize);
+            let slice =
+                std::slice::from_raw_parts(trans_ptr as *const u16, (trans_len / 2) as usize);
             for chunk in slice.chunks_exact(2) {
                 langs.push(format!("{:04x}{:04x}", chunk[0], chunk[1]));
             }
@@ -210,7 +236,8 @@ pub fn pe_product_name(path: &str) -> Option<String> {
                     && !val_ptr.is_null()
                     && val_len > 1
                 {
-                    let u16_slice = std::slice::from_raw_parts(val_ptr as *const u16, val_len as usize);
+                    let u16_slice =
+                        std::slice::from_raw_parts(val_ptr as *const u16, val_len as usize);
                     let mut s = String::from_utf16_lossy(u16_slice);
                     if let Some(nul) = s.find('\0') {
                         s.truncate(nul);
@@ -243,7 +270,9 @@ pub fn active_steam_appid() -> Option<u32> {
         RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER, KEY_READ, REG_DWORD,
     };
 
-    let subkey: Vec<u16> = "Software\\Valve\\Steam\\ActiveProcess\0".encode_utf16().collect();
+    let subkey: Vec<u16> = "Software\\Valve\\Steam\\ActiveProcess\0"
+        .encode_utf16()
+        .collect();
     let val_name: Vec<u16> = "RunningAppId\0".encode_utf16().collect();
     let mut hkey = Default::default();
 
@@ -286,9 +315,23 @@ pub fn active_steam_appid() -> Option<u32> {
 pub fn is_likely_game_path(path: &str) -> bool {
     let lower = path.replace('\\', "/").to_lowercase();
     let keywords = [
-        "/games/", "/game/", "/steam", "/epic", "/gog", "/riot", "/blizzard",
-        "/ubisoft", "/ea games/", "/origin", "/itch", "/emulators/", "/roms/",
-        "/prime gaming/", "/amazon games/", "/battlenet/", "/battle.net/",
+        "/games/",
+        "/game/",
+        "/steam",
+        "/epic",
+        "/gog",
+        "/riot",
+        "/blizzard",
+        "/ubisoft",
+        "/ea games/",
+        "/origin",
+        "/itch",
+        "/emulators/",
+        "/roms/",
+        "/prime gaming/",
+        "/amazon games/",
+        "/battlenet/",
+        "/battle.net/",
     ];
     keywords.iter().any(|k| lower.contains(k))
 }
@@ -322,7 +365,10 @@ pub fn installed_game(path: &str) -> Option<InstalledGame> {
     }
 
     let (root_end, steamapps) = match lower.find("/steamapps/common/") {
-        Some(i) => (i + "/steamapps/common/".len(), Some(slashed[..i + "/steamapps".len()].to_string())),
+        Some(i) => (
+            i + "/steamapps/common/".len(),
+            Some(slashed[..i + "/steamapps".len()].to_string()),
+        ),
         None => {
             let hit = OTHER_LIBRARIES
                 .iter()
@@ -339,7 +385,10 @@ pub fn installed_game(path: &str) -> Option<InstalledGame> {
     if NOT_GAME_FOLDERS.contains(&folder.to_lowercase().as_str()) {
         return None;
     }
-    Some(InstalledGame { folder: folder.to_string(), steamapps })
+    Some(InstalledGame {
+        folder: folder.to_string(),
+        steamapps,
+    })
 }
 
 /// `installdir` -> `name` for every game in a Steam library's manifests.
@@ -377,23 +426,39 @@ mod tests {
 
     #[test]
     fn curated_list_loads_and_matches_by_exe() {
-        assert_eq!(curated_name("VALORANT-Win64-Shipping.exe", "", &[]), Some("VALORANT"));
-        assert_eq!(curated_name("valorant-win64-shipping.EXE", "", &[]), Some("VALORANT"));
+        assert_eq!(
+            curated_name("VALORANT-Win64-Shipping.exe", "", &[]),
+            Some("VALORANT")
+        );
+        assert_eq!(
+            curated_name("valorant-win64-shipping.EXE", "", &[]),
+            Some("VALORANT")
+        );
         assert_eq!(curated_name("notepad.exe", "", &[]), None);
     }
 
     #[test]
     fn folder_qualified_entries_need_that_folder() {
         assert_eq!(
-            curated_name("wow-64.exe", "C:\\Games\\World of Warcraft\\_retail_\\Wow-64.exe", &[]),
+            curated_name(
+                "wow-64.exe",
+                "C:\\Games\\World of Warcraft\\_retail_\\Wow-64.exe",
+                &[]
+            ),
             Some("World of Warcraft")
         );
-        assert_eq!(curated_name("wow-64.exe", "C:\\Other\\wow-64.exe", &[]), None);
+        assert_eq!(
+            curated_name("wow-64.exe", "C:\\Other\\wow-64.exe", &[]),
+            None
+        );
     }
 
     #[test]
     fn generic_exes_need_a_matching_window_title() {
-        assert_eq!(curated_name("javaw.exe", "", &["IntelliJ IDEA".into()]), None);
+        assert_eq!(
+            curated_name("javaw.exe", "", &["IntelliJ IDEA".into()]),
+            None
+        );
         assert_eq!(
             curated_name("javaw.exe", "", &["Minecraft 1.21".into()]),
             Some("Minecraft")
@@ -402,27 +467,31 @@ mod tests {
 
     #[test]
     fn steam_games_give_the_folder_and_library() {
-        let game = installed_game(
-            r"D:\SteamLibrary\steamapps\common\Hades II\Ship\Hades2.exe",
-        )
-        .unwrap();
+        let game =
+            installed_game(r"D:\SteamLibrary\steamapps\common\Hades II\Ship\Hades2.exe").unwrap();
         assert_eq!(game.folder, "Hades II");
         assert_eq!(game.steamapps.as_deref(), Some("D:/SteamLibrary/steamapps"));
     }
 
     #[test]
     fn other_launchers_give_the_folder() {
-        let epic = installed_game(r"C:\Program Files\Epic Games\Fortnite\FortniteGame\a.exe").unwrap();
+        let epic =
+            installed_game(r"C:\Program Files\Epic Games\Fortnite\FortniteGame\a.exe").unwrap();
         assert_eq!(epic.folder, "Fortnite");
         assert!(epic.steamapps.is_none());
-        assert!(installed_game(r"C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\x.exe").is_none());
+        assert!(installed_game(
+            r"C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\x.exe"
+        )
+        .is_none());
     }
 
     #[test]
     fn helpers_and_tools_are_not_games() {
         assert!(installed_game(r"C:\Steam\steamapps\common\Foo\UnityCrashHandler64.exe").is_none());
         assert!(installed_game(r"C:\Steam\steamapps\common\Foo\vc_redist.x64.exe").is_none());
-        assert!(installed_game(r"C:\Steam\steamapps\common\Wallpaper Engine\wallpaper32.exe").is_none());
+        assert!(
+            installed_game(r"C:\Steam\steamapps\common\Wallpaper Engine\wallpaper32.exe").is_none()
+        );
         assert!(installed_game(r"C:\Steam\steamapps\common\Steamworks Shared\x.exe").is_none());
     }
 
@@ -435,16 +504,23 @@ mod tests {
     #[test]
     fn manifest_gives_install_dir_and_name() {
         let acf = "\"AppState\"\n{\n\t\"appid\"\t\t\"1145350\"\n\t\"name\"\t\t\"Hades II\"\n\t\"installdir\"\t\t\"Hades II\"\n}\n";
-        assert_eq!(parse_manifest(acf), Some(("Hades II".into(), "Hades II".into())));
+        assert_eq!(
+            parse_manifest(acf),
+            Some(("Hades II".into(), "Hades II".into()))
+        );
         assert_eq!(parse_manifest("garbage"), None);
     }
 
     #[test]
     fn likely_game_paths_identified() {
         assert!(is_likely_game_path(r"D:\Games\Baldurs Gate 3\bin\bg3.exe"));
-        assert!(is_likely_game_path(r"C:\Riot Games\League of Legends\game.exe"));
+        assert!(is_likely_game_path(
+            r"C:\Riot Games\League of Legends\game.exe"
+        ));
         assert!(is_likely_game_path(r"E:\Emulators\rpcs3\rpcs3.exe"));
-        assert!(!is_likely_game_path(r"C:\Program Files\Mozilla Firefox\firefox.exe"));
+        assert!(!is_likely_game_path(
+            r"C:\Program Files\Mozilla Firefox\firefox.exe"
+        ));
     }
 
     #[test]

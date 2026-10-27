@@ -91,7 +91,11 @@ pub fn set_activity_detection(
     music: bool,
     custom: Option<Vec<CustomApp>>,
 ) {
-    let config = Config { games, music, custom: custom.unwrap_or_default() };
+    let config = Config {
+        games,
+        music,
+        custom: custom.unwrap_or_default(),
+    };
     let any = config.any();
     *lock(&state.shared.config) = config;
     state.shared.wake.notify_all();
@@ -127,7 +131,11 @@ pub fn list_running_programs() -> Vec<RunningProgram> {
             .into_iter()
             .filter(|p| seen.insert(p.exe_file.to_lowercase()))
             .map(|p| RunningProgram {
-                title: p.titles.into_iter().find(|t| !t.trim().is_empty()).unwrap_or_default(),
+                title: p
+                    .titles
+                    .into_iter()
+                    .find(|t| !t.trim().is_empty())
+                    .unwrap_or_default(),
                 exe: p.exe_file,
             })
             .collect();
@@ -277,13 +285,22 @@ impl Detector {
         custom: &[CustomApp],
     ) -> Option<String> {
         // 0. A program the person added themselves always counts, under the name they gave it.
-        if let Some(app) = custom.iter().find(|a| a.exe.eq_ignore_ascii_case(&process.exe_file)) {
+        if let Some(app) = custom
+            .iter()
+            .find(|a| a.exe.eq_ignore_ascii_case(&process.exe_file))
+        {
             let name = app.name.trim();
-            return Some(if name.is_empty() { app.exe.clone() } else { name.to_string() });
+            return Some(if name.is_empty() {
+                app.exe.clone()
+            } else {
+                name.to_string()
+            });
         }
 
         // 1. Curated list / Discord detectable database match (includes generic runner window title checks)
-        if let Some(name) = classify::curated_name(&process.exe_file, &process.path, &process.titles) {
+        if let Some(name) =
+            classify::curated_name(&process.exe_file, &process.path, &process.titles)
+        {
             return Some(name.to_string());
         }
 
@@ -351,7 +368,10 @@ struct SteamNames {
     /// steamapps dir -> (when read, lower-case install folder -> name)
     libraries: std::collections::HashMap<
         String,
-        (std::time::Instant, std::collections::HashMap<String, String>),
+        (
+            std::time::Instant,
+            std::collections::HashMap<String, String>,
+        ),
     >,
 }
 
@@ -366,8 +386,10 @@ impl SteamNames {
             .map(|(read, names)| read.elapsed() > RELOAD_AFTER && !names.contains_key(&key))
             .unwrap_or(true);
         if stale {
-            self.libraries
-                .insert(steamapps.to_string(), (std::time::Instant::now(), read_manifests(steamapps)));
+            self.libraries.insert(
+                steamapps.to_string(),
+                (std::time::Instant::now(), read_manifests(steamapps)),
+            );
         }
         self.libraries
             .get(steamapps)
@@ -411,13 +433,20 @@ mod tests {
     #[ignore]
     fn probe_this_computer() {
         let mut detector = Detector::new();
-        let config = Config { games: true, music: true, custom: Vec::new() };
+        let config = Config {
+            games: true,
+            music: true,
+            custom: Vec::new(),
+        };
         println!("detected: {:?}", detector.detect(&config));
         let processes = detector.scanner.scan();
         println!("{} programs with a window", processes.len());
         for process in processes {
             let game = detector.game_name(&process, &[]);
-            println!("  {:?} {} fg={} since={}", game, process.exe_file, process.foreground, process.started_ms);
+            println!(
+                "  {:?} {} fg={} since={}",
+                game, process.exe_file, process.foreground, process.started_ms
+            );
         }
         println!("media sessions: {:?}", music::describe_sessions());
         println!("music: {:?}", music::playing());

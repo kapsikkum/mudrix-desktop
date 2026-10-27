@@ -6,8 +6,8 @@ fn main() {
     let games = std::fs::read_to_string("src/activity/games.json").expect("games.json");
     let games: serde_json::Value =
         serde_json::from_str(&games).expect("games.json is not valid JSON");
-    let out = std::path::Path::new(&std::env::var_os("OUT_DIR").expect("OUT_DIR"))
-        .join("games.min.json");
+    let out =
+        std::path::Path::new(&std::env::var_os("OUT_DIR").expect("OUT_DIR")).join("games.min.json");
     std::fs::write(out, games.to_string()).expect("write games.min.json");
 
     // A release build with the updater key still at its placeholder would ship an app whose
