@@ -144,6 +144,7 @@ pub fn run() {
             capture::capture_stop,
             activity::set_activity_detection,
             activity::get_activity,
+            activity::list_running_programs,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the Mudrix desktop app");

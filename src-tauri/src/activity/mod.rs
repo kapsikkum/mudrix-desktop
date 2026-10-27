@@ -20,7 +20,7 @@ mod music;
 #[cfg(windows)]
 mod scan;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -45,14 +45,22 @@ pub struct Activity {
     pub started_at: u64,
 }
 
-#[derive(Default, Clone, Copy)]
+/// A program the person added by hand: when `exe` is running it counts as the game `name`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CustomApp {
+    pub exe: String,
+    pub name: String,
+}
+
+#[derive(Default, Clone)]
 struct Config {
     games: bool,
     music: bool,
+    custom: Vec<CustomApp>,
 }
 
 impl Config {
-    fn any(self) -> bool {
+    fn any(&self) -> bool {
         self.games || self.music
     }
 }
@@ -81,12 +89,14 @@ pub fn set_activity_detection(
     state: State<'_, ActivityState>,
     games: bool,
     music: bool,
+    custom: Option<Vec<CustomApp>>,
 ) {
-    let config = Config { games, music };
+    let config = Config { games, music, custom: custom.unwrap_or_default() };
+    let any = config.any();
     *lock(&state.shared.config) = config;
     state.shared.wake.notify_all();
 
-    if config.any() {
+    if any {
         let mut started = lock(&state.started);
         if !*started {
             *started = true;
@@ -96,6 +106,37 @@ pub fn set_activity_detection(
                 .spawn(move || run(app, shared))
                 .ok();
         }
+    }
+}
+
+/// A program that is open right now, for picking one to add.
+#[derive(Debug, Clone, Serialize)]
+pub struct RunningProgram {
+    pub exe: String,
+    pub title: String,
+}
+
+/// The programs with a window open right now (one per exe), so the person can pick the one to add.
+#[tauri::command]
+pub fn list_running_programs() -> Vec<RunningProgram> {
+    #[cfg(windows)]
+    {
+        let mut seen = std::collections::HashSet::new();
+        let mut out: Vec<RunningProgram> = scan::Scanner::default()
+            .scan()
+            .into_iter()
+            .filter(|p| seen.insert(p.exe_file.to_lowercase()))
+            .map(|p| RunningProgram {
+                title: p.titles.into_iter().find(|t| !t.trim().is_empty()).unwrap_or_default(),
+                exe: p.exe_file,
+            })
+            .collect();
+        out.sort_by_key(|p| p.exe.to_lowercase());
+        out
+    }
+    #[cfg(not(windows))]
+    {
+        Vec::new()
     }
 }
 
@@ -130,10 +171,10 @@ fn run(app: AppHandle, shared: Arc<Shared>) {
                 detector.forget();
                 config = shared.wake.wait(config).unwrap_or_else(|e| e.into_inner());
             }
-            *config
+            config.clone()
         };
 
-        publish(&app, &shared, detector.detect(config));
+        publish(&app, &shared, detector.detect(&config));
 
         let guard = lock(&shared.config);
         let _ = shared.wake.wait_timeout(guard, SCAN_INTERVAL);
@@ -166,12 +207,12 @@ impl Detector {
     }
 
     #[cfg(not(windows))]
-    fn detect(&mut self, _config: Config) -> Vec<Activity> {
+    fn detect(&mut self, _config: &Config) -> Vec<Activity> {
         Vec::new()
     }
 
     #[cfg(windows)]
-    fn detect(&mut self, config: Config) -> Vec<Activity> {
+    fn detect(&mut self, config: &Config) -> Vec<Activity> {
         // A game and a track are both reported when both are going.
         let found: Vec<Activity> = [self.game(config), self.track(config)]
             .into_iter()
@@ -197,13 +238,13 @@ impl Detector {
     }
 
     #[cfg(windows)]
-    fn game(&mut self, config: Config) -> Option<Activity> {
+    fn game(&mut self, config: &Config) -> Option<Activity> {
         if !config.games {
             return None;
         }
         let mut games: Vec<(String, u64, bool)> = Vec::new();
         for process in self.scanner.scan() {
-            if let Some(name) = self.game_name(&process) {
+            if let Some(name) = self.game_name(&process, &config.custom) {
                 games.push((name, process.started_ms, process.foreground));
             }
         }
@@ -230,7 +271,17 @@ impl Detector {
     }
 
     #[cfg(windows)]
-    fn game_name(&mut self, process: &scan::WindowedProcess) -> Option<String> {
+    fn game_name(
+        &mut self,
+        process: &scan::WindowedProcess,
+        custom: &[CustomApp],
+    ) -> Option<String> {
+        // 0. A program the person added themselves always counts, under the name they gave it.
+        if let Some(app) = custom.iter().find(|a| a.exe.eq_ignore_ascii_case(&process.exe_file)) {
+            let name = app.name.trim();
+            return Some(if name.is_empty() { app.exe.clone() } else { name.to_string() });
+        }
+
         // 1. Curated list / Discord detectable database match (includes generic runner window title checks)
         if let Some(name) = classify::curated_name(&process.exe_file, &process.path, &process.titles) {
             return Some(name.to_string());
@@ -264,7 +315,7 @@ impl Detector {
     }
 
     #[cfg(windows)]
-    fn track(&mut self, config: Config) -> Option<Activity> {
+    fn track(&mut self, config: &Config) -> Option<Activity> {
         if !config.music {
             return None;
         }
@@ -360,12 +411,12 @@ mod tests {
     #[ignore]
     fn probe_this_computer() {
         let mut detector = Detector::new();
-        let config = Config { games: true, music: true };
-        println!("detected: {:?}", detector.detect(config));
+        let config = Config { games: true, music: true, custom: Vec::new() };
+        println!("detected: {:?}", detector.detect(&config));
         let processes = detector.scanner.scan();
         println!("{} programs with a window", processes.len());
         for process in processes {
-            let game = detector.game_name(&process);
+            let game = detector.game_name(&process, &[]);
             println!("  {:?} {} fg={} since={}", game, process.exe_file, process.foreground, process.started_ms);
         }
         println!("media sessions: {:?}", music::describe_sessions());

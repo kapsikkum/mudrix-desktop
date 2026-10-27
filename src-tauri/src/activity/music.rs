@@ -2,8 +2,10 @@
 //! source as the volume flyout's media card). Spotify, most music players and many other apps
 //! report to it.
 //!
-//! Browsers are left out on purpose: a tab that plays something says what the person is
-//! browsing, which is not what they agreed to share. So are sessions the system marks as video.
+//! Only music is shared. Browsers are left out on purpose: a tab that plays something says what
+//! the person is browsing, which is not what they agreed to share. So are video players (VLC, MPC,
+//! mpv, Movies & TV, streaming apps): their "title" is the name of the film or file. A session has
+//! to say it is music; one that says nothing about its type counts only for a known music app.
 
 use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSession as Session,
@@ -26,11 +28,50 @@ const BROWSERS: &[&str] = &[
     "308046b0af4a39cb",
 ];
 
-fn is_browser(app_id: &str) -> bool {
+fn id_has_word(app_id: &str, words: &[&str]) -> bool {
     let id = app_id.to_lowercase();
-    BROWSERS.iter().any(|b| {
-        id.split(|c: char| !c.is_ascii_alphanumeric()).any(|part| part == *b)
-    })
+    words.iter().any(|w| id.split(|c: char| !c.is_ascii_alphanumeric()).any(|part| part == *w))
+}
+
+fn is_browser(app_id: &str) -> bool {
+    id_has_word(app_id, BROWSERS)
+}
+
+/// Players and apps whose "track" is a film, episode or file name: never shared.
+const VIDEO_APPS: &[&str] = &[
+    "vlc", "mpc", "mpchc", "mpchc64", "mpv", "potplayer", "potplayermini", "kmplayer", "gom",
+    "smplayer", "mplayer", "wmplayer", "zunevideo", "movies", "netflix", "plex", "disney",
+    "primevideo", "hulu", "crunchyroll", "twitch", "obs", "kodi", "jellyfin", "emby", "stremio",
+    "youtube", "videos", "video",
+];
+
+/// Music apps trusted even when their session does not say what type it is.
+const MUSIC_APPS: &[&str] = &[
+    "spotify", "applemusic", "itunes", "zunemusic", "music", "foobar2000", "musicbee", "aimp",
+    "winamp", "tidal", "deezer", "amazonmusic", "plexamp", "ytmdesktop", "youtubemusic",
+    "pulsar", "strawberry", "qobuz", "groove", "mediamonkey",
+];
+
+fn is_video_app(app_id: &str) -> bool {
+    id_has_word(app_id, VIDEO_APPS)
+}
+
+fn is_music_app(app_id: &str) -> bool {
+    // App ids look like `Spotify.exe` or `Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic`.
+    let id = app_id.to_lowercase();
+    MUSIC_APPS.iter().any(|m| id.contains(m))
+}
+
+/// Whether a session counts as music: it says so, or it is a known music app and says nothing.
+fn counts_as_music(app_id: &str, kind: Option<MediaPlaybackType>) -> bool {
+    if is_browser(app_id) || is_video_app(app_id) {
+        return false;
+    }
+    match kind {
+        Some(MediaPlaybackType::Music) => true,
+        Some(MediaPlaybackType::Video) | Some(MediaPlaybackType::Image) => false,
+        _ => is_music_app(app_id),
+    }
 }
 
 /// The track that is playing, if any. Prefers the system's current session.
@@ -52,14 +93,13 @@ fn track_of(session: &Session) -> Option<Track> {
         return None;
     }
     let app = session.SourceAppUserModelId().ok()?.to_string();
-    if is_browser(&app) {
+    if is_browser(&app) || is_video_app(&app) {
         return None;
     }
     let props = session.TryGetMediaPropertiesAsync().ok()?.join().ok()?;
-    if let Ok(kind) = props.PlaybackType().and_then(|k| k.Value()) {
-        if kind == MediaPlaybackType::Video {
-            return None;
-        }
+    let kind = props.PlaybackType().and_then(|k| k.Value()).ok();
+    if !counts_as_music(&app, kind) {
+        return None;
     }
     let title = props.Title().ok()?.to_string();
     if title.trim().is_empty() {
@@ -92,5 +132,24 @@ mod tests {
         assert!(is_browser("308046B0AF4A39CB"));
         assert!(!is_browser("Spotify.exe"));
         assert!(!is_browser("Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic"));
+    }
+
+    #[test]
+    fn video_players_never_count() {
+        for app in ["vlc.exe", "VLC", "org.videolan.vlc", "MPC-HC64.exe", "mpv.exe", "Microsoft.ZuneVideo_8wekyb3d8bbwe!Microsoft.ZuneVideo"] {
+            assert!(is_video_app(app), "{app}");
+            assert!(!counts_as_music(app, Some(MediaPlaybackType::Music)), "{app}");
+            assert!(!counts_as_music(app, None), "{app}");
+        }
+    }
+
+    #[test]
+    fn music_needs_a_music_type_or_a_known_music_app() {
+        assert!(counts_as_music("Spotify.exe", Some(MediaPlaybackType::Music)));
+        assert!(counts_as_music("Spotify.exe", None));
+        assert!(counts_as_music("SomeNewPlayer.exe", Some(MediaPlaybackType::Music)));
+        assert!(!counts_as_music("SomeNewPlayer.exe", None));
+        assert!(!counts_as_music("Spotify.exe", Some(MediaPlaybackType::Video)));
+        assert!(counts_as_music("Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic", None));
     }
 }
