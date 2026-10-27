@@ -6,8 +6,9 @@
 //! Settings, Privacy). Turning both kinds off stops the scan and clears the activity.
 //!
 //! - `set_activity_detection(games, music)` starts, adjusts or stops the scan.
-//! - `get_activity` is what the scan sees right now.
-//! - The `desktop://activity` event fires when that changes (payload: the activity or `null`).
+//! - `get_activity` is what the scan sees right now: a list, as a game and a track can both be
+//!   there at once.
+//! - The `desktop://activity` event fires when that changes (payload: the list, empty for none).
 //!
 //! Games are programs with a window that are on the hand-kept list or run from a game library
 //! (`classify`); music is the track playing in a media player (`music`, never a browser).
@@ -61,7 +62,7 @@ struct Shared {
     config: Mutex<Config>,
     /// Signalled when the config changes, so the scan thread reacts at once.
     wake: Condvar,
-    current: Mutex<Option<Activity>>,
+    current: Mutex<Vec<Activity>>,
 }
 
 #[derive(Default)]
@@ -99,7 +100,7 @@ pub fn set_activity_detection(
 }
 
 #[tauri::command]
-pub fn get_activity(state: State<'_, ActivityState>) -> Option<Activity> {
+pub fn get_activity(state: State<'_, ActivityState>) -> Vec<Activity> {
     lock(&state.shared.current).clone()
 }
 
@@ -108,7 +109,7 @@ pub fn init(app: &AppHandle) {
     app.manage(ActivityState::default());
 }
 
-fn publish(app: &AppHandle, shared: &Shared, next: Option<Activity>) {
+fn publish(app: &AppHandle, shared: &Shared, next: Vec<Activity>) {
     let mut current = lock(&shared.current);
     if *current == next {
         return;
@@ -125,7 +126,7 @@ fn run(app: AppHandle, shared: Arc<Shared>) {
         let config = {
             let mut config = lock(&shared.config);
             while !config.any() {
-                publish(&app, &shared, None);
+                publish(&app, &shared, Vec::new());
                 detector.forget();
                 config = shared.wake.wait(config).unwrap_or_else(|e| e.into_inner());
             }
@@ -145,8 +146,8 @@ struct Detector {
     scanner: scan::Scanner,
     #[cfg(windows)]
     steam: SteamNames,
-    /// The activity reported last time, so a game or track keeps its start time.
-    last: Option<Activity>,
+    /// The activities reported last time, so a game or track keeps its start time.
+    last: Vec<Activity>,
 }
 
 impl Detector {
@@ -156,38 +157,41 @@ impl Detector {
             scanner: scan::Scanner::default(),
             #[cfg(windows)]
             steam: SteamNames::default(),
-            last: None,
+            last: Vec::new(),
         }
     }
 
     fn forget(&mut self) {
-        self.last = None;
+        self.last.clear();
     }
 
     #[cfg(not(windows))]
-    fn detect(&mut self, _config: Config) -> Option<Activity> {
-        None
+    fn detect(&mut self, _config: Config) -> Vec<Activity> {
+        Vec::new()
     }
 
     #[cfg(windows)]
-    fn detect(&mut self, config: Config) -> Option<Activity> {
-        let found = self.game(config).or_else(|| self.track(config));
-        // The same thing seen again keeps the start time it was first given.
-        let found = found.map(|mut now| {
-            if let Some(before) = &self.last {
-                if before.kind == now.kind
-                    && before.name == now.name
-                    && before.details == now.details
-                    && now.started_at == 0
-                {
-                    now.started_at = before.started_at;
+    fn detect(&mut self, config: Config) -> Vec<Activity> {
+        // A game and a track are both reported when both are going.
+        let found: Vec<Activity> = [self.game(config), self.track(config)]
+            .into_iter()
+            .flatten()
+            // The same thing seen again keeps the start time it was first given.
+            .map(|mut now| {
+                if now.started_at == 0 {
+                    now.started_at = self
+                        .last
+                        .iter()
+                        .find(|before| {
+                            before.kind == now.kind
+                                && before.name == now.name
+                                && before.details == now.details
+                        })
+                        .map_or_else(epoch_ms, |before| before.started_at);
                 }
-            }
-            if now.started_at == 0 {
-                now.started_at = epoch_ms();
-            }
-            now
-        });
+                now
+            })
+            .collect();
         self.last = found.clone();
         found
     }
@@ -208,8 +212,8 @@ impl Detector {
         }
         let previous = self
             .last
-            .as_ref()
-            .filter(|a| a.kind == "game")
+            .iter()
+            .find(|a| a.kind == "game")
             .map(|a| a.name.as_str());
         // The one in front, else the one already shown, else the one started last.
         let pick = games
