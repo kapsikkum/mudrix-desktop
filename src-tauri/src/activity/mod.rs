@@ -14,6 +14,9 @@
 //! (`classify`); music is the track playing in a media player (`music`, never a browser).
 //! Windows only for now: elsewhere the scan reports nothing.
 
+// The detection itself is Windows-only; elsewhere most of this module is unused.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 mod classify;
 #[cfg(windows)]
 mod music;
