@@ -184,6 +184,9 @@ jobs:
     needs: [prepare, build]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -238,16 +241,33 @@ jobs:
 
           ls -la out
           (cd out && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+      # The same "What's new" list the app shows, from the web repo's commits since its previous
+      # release. A failure only means the release page has no list.
+      - name: Write the release body
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          {
+            echo "Mudrix Desktop ${VERSION}."
+            echo
+            echo "**What's new**"
+            echo
+          } > body.md
+          git -C mudrix-web fetch --tags --force --unshallow origin 2>/dev/null || git -C mudrix-web fetch --tags --force origin || true
+          (cd mudrix-web && node scripts/release-notes.mjs "$VERSION" --body "$GITHUB_WORKSPACE/notes.md") \
+            && sed 's/^## /### /' notes.md >> body.md \
+            || echo "::warning::could not write the release notes"
+          cat >> body.md <<'EOF'
+
+          These builds are **not code-signed**. Windows SmartScreen ("More info", then "Run anyway")
+          and macOS Gatekeeper (System Settings, Privacy & Security, "Open Anyway") will ask you to
+          confirm the first launch. Linux: use the AppImage, .deb or .rpm.
+          EOF
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
           prerelease: ${{ needs.prepare.outputs.prerelease == 'true' }}
           name: Mudrix Desktop ${{ needs.prepare.outputs.version }}
           generate_release_notes: true
-          body: |
-            Mudrix Desktop ${{ needs.prepare.outputs.version }}.
-
-            These builds are **not code-signed**. Windows SmartScreen ("More info", then "Run anyway")
-            and macOS Gatekeeper (System Settings, Privacy & Security, "Open Anyway") will ask you to
-            confirm the first launch. Linux: use the AppImage, .deb or .rpm.
+          body_path: body.md
           files: out/*

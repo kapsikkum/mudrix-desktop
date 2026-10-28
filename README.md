@@ -18,6 +18,9 @@ It wraps the Mudrix web client (the `mudrix-web` git submodule) and adds:
 - `matrix:` deep links
 - in-app updates, verified against a minisign signature (Windows and macOS install them, Linux gets a download prompt; AppImage installs update in place)
 - a themed app icon that follows the theme setting (window and tray)
+- optional activity sharing (Settings > Activity): detects the game you are playing (against a list of
+  known games, plus programs you add yourself) and the song playing in a music app, and shows it on your
+  profile. Windows only for now.
 - SSO / OIDC login through the system browser (see below)
 
 ## Setup
@@ -58,7 +61,7 @@ npm run desktop:build
 This builds `mudrix-web` (`npm ci` and `npm run build` inside the submodule), then the installers into
 `src-tauri/target/release/bundle/` (NSIS and MSI on Windows, `.dmg` and `.app` on macOS, AppImage,
 `.deb` and `.rpm` on Linux). For a universal macOS build add `-- --target universal-apple-darwin`.
-Releases are built by GitHub Actions, see `RELEASING.md`.
+Releases are built by GitHub Actions; `RELEASING.md` covers cutting a release and the update signing key.
 
 ## Unsigned builds
 
@@ -71,21 +74,6 @@ Releases are not code-signed.
 
 The installers are unsigned, but in-app updates are not: every update is checked against a minisign
 signature (`tauri-plugin-updater`) before it is installed.
-
-## Update signing (maintainers)
-
-Updates are signed with a key pair you generate once. The private key stays in GitHub secrets, the public
-key is committed in `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`, currently a placeholder):
-
-```sh
-npx tauri signer generate -w ~/.tauri/mudrix-updater.key
-```
-
-Paste the printed public key into `plugins.updater.pubkey`, and add the secrets
-`TAURI_SIGNING_PRIVATE_KEY` (the key file's contents) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to the
-repository. Release builds fail while the placeholder is still in place (set
-`MUDRIX_ALLOW_PLACEHOLDER_UPDATER_KEY=1` for a throwaway local build; the app then keeps updates
-disabled). Details in `RELEASING.md`.
 
 ## Login: SSO and OIDC
 
@@ -119,7 +107,8 @@ notification is opened.
 | `src-tauri/tauri.conf.json` | window, CSP, bundle config (version read from `package.json`) |
 | `src-tauri/capabilities/default.json` | permissions of the webview (only `core:default`) |
 | `src-tauri/icons/` | app icons (generated from `logo.svg` with `tauri icon`) and `tray/` variants |
-| `scripts/` | `check-version.mjs`, `set-version.mjs` |
+| `src-tauri/src/activity/` | activity detection (running games, music) and `games.json`, the known-games list |
+| `scripts/` | `check-version.mjs`, `set-version.mjs`, `sync-games-db.mjs`, `format-games-db.mjs` |
 
 The web client talks to the shell through `src/util/desktop.ts` in `mudrix-web`; none of it runs in a
 normal browser.

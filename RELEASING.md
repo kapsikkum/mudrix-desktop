@@ -72,32 +72,37 @@ Output is in `src-tauri/target/release/bundle/`.
 | `VITE_GIPHY_API_KEY`, `VITE_KLIPY_API_KEY` | optional web client keys |
 
 The release workflow fails in its first job when the two signing secrets are missing or
-`plugins.updater.pubkey` is still the placeholder.
+`plugins.updater.pubkey` has been put back to the placeholder value.
 
 Windows code signing and Apple signing/notarization are intentionally not wired up. If that changes later,
 tauri-action reads `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
 `APPLE_PASSWORD`, `APPLE_TEAM_ID` for macOS and `bundle.windows.signCommand` (or a certificate thumbprint)
 for Windows.
 
-## One-time setup: update signing key
+## Update signing key
 
-1. Generate the key pair (pick a password; the workflow needs one):
+The key pair has been generated: the public key is committed as `plugins.updater.pubkey` in
+`src-tauri/tauri.conf.json`, and the private key and its password are the `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets. Keep a backup of the private key. Installs only accept
+updates signed by it; if it is lost or changed, existing installs can no longer update in place and users have
+to reinstall manually.
+
+To create a new key pair (a fresh fork, or a deliberate rotation):
+
+1. Generate it (pick a password; the workflow needs one):
    ```sh
    npx tauri signer generate -w ~/.tauri/mudrix-updater.key
    ```
    This writes the private key to that file and prints the public key (also saved as `.key.pub`).
-2. Put the public key into `src-tauri/tauri.conf.json` as `plugins.updater.pubkey`, replacing
-   `REPLACE_WITH_OUTPUT_OF_tauri_signer_generate`, and commit it.
-3. In the GitHub repository, Settings > Secrets and variables > Actions, add
+2. Put the public key into `src-tauri/tauri.conf.json` as `plugins.updater.pubkey` and commit it.
+3. In the GitHub repository, Settings > Secrets and variables > Actions, replace
    `TAURI_SIGNING_PRIVATE_KEY` (the contents of the private key file) and
    `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
-4. Back the private key up somewhere safe. Installs only accept updates signed by it; if it is lost or
-   changed, existing installs can no longer update in place and users have to reinstall manually.
 
 Local release builds (`npm run desktop:build`) also need `TAURI_SIGNING_PRIVATE_KEY` (and the password) in the
-environment because `bundle.createUpdaterArtifacts` is on. The build script panics for release builds while
-the public key is the placeholder; `MUDRIX_ALLOW_PLACEHOLDER_UPDATER_KEY=1` skips that check (the app then
-logs that updates are disabled and never checks).
+environment because `bundle.createUpdaterArtifacts` is on. The build script panics for release builds when
+the public key is the placeholder (as in a fresh fork); `MUDRIX_ALLOW_PLACEHOLDER_UPDATER_KEY=1` skips that
+check (the app then logs that updates are disabled and never checks).
 
 ## In-app updates
 
@@ -134,9 +139,12 @@ keeps the user's data.
 
 ## Not verified yet
 
-- A full `tauri build` on each OS (only `cargo check` was run locally).
+The release pipeline has produced working Windows, macOS and Linux bundles (v26.10.18 is the latest), but
+these still need a hands-on check on real machines:
+
 - The first end-to-end SSO/OIDC login through the loopback listener against a real homeserver.
 - Windows taskbar overlay, macOS dock badge, `matrix:` handler registration from an installed build.
 - The signed updater against a real newer release, including the `latest.json` the workflow writes (the
   Windows passive install and the macOS bundle swap especially); it needs an installed build older than the
   latest published release to test.
+- Activity detection on real machines (Spotify, VLC and other players, games from the known-games list).
