@@ -24,7 +24,7 @@ mod tray;
 mod updater;
 
 use std::sync::Mutex;
-use tauri::{Manager, WindowEvent};
+use tauri::{Manager, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_window_state::WindowExt;
 
@@ -91,6 +91,17 @@ pub fn run() {
                 }
             }
 
+            // The main window is made here rather than from the config (`"create": false`
+            // there), because only a window made in code can answer `window.open`.
+            if let Some(config) = app.config().app.windows.iter().find(|w| w.label == MAIN_WINDOW) {
+                let popout_handle = handle.clone();
+                WebviewWindowBuilder::from_config(app, config)?
+                    .on_new_window(move |url, features| {
+                        popout::on_new_window(&popout_handle, url, features)
+                    })
+                    .build()?;
+            }
+
             if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
                 permissions::allow_call_media(&window);
                 // The window starts hidden (no white flash); place it, then show it.
@@ -142,9 +153,7 @@ pub fn run() {
             screenshare::hide_screen_share_bar,
             screenshare::screen_share_bar_stop,
             screenshare::screen_share_bar_return,
-            popout::show_call_popout,
             popout::hide_call_popout,
-            popout::call_popout_focus_main,
             capture::capture_list_sources,
             capture::capture_start,
             capture::capture_stop,

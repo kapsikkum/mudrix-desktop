@@ -1,36 +1,25 @@
-//! The call's pop out window.
+//! The call's window of its own.
 //!
-//! A small always-on-top window of ours (`desktop/call-popout.html` in the web app) that mirrors
-//! the call's video and has mute, "Return to call" and hang up buttons. The browser's own
-//! Document Picture-in-Picture cannot do this: WebView2 offers the API but has no window to put
-//! it in ("Internal error: no window"). The call itself stays in the main window; the two pages
-//! share frames and button presses over a `BroadcastChannel` (same origin), so the only things
-//! done natively are opening, closing and noticing that the user closed it.
+//! The web app asks for it with `window.open("/desktop/call-window.html", ...)`, and this module
+//! is what answers: the main window's new-window handler (see `lib.rs`) creates the window,
+//! linked to the main one, so the web app gets a `Window` it can render the call into, while the
+//! call itself (the call engine, the Matrix client, the media) stays in the main window. The
+//! browser's own Document Picture-in-Picture cannot do this: WebView2 offers the API but has no
+//! window to put it in ("Internal error: no window"). Any other `window.open` is refused, as
+//! before.
 
-use crate::{commands, MAIN_WINDOW};
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use crate::MAIN_WINDOW;
+use tauri::webview::{NewWindowFeatures, NewWindowResponse};
+use tauri::{AppHandle, Emitter, Manager, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
 
-/// Label of the pop out window. Also on the window-state denylist (see `lib.rs`).
+/// Label of the call window. Also on the window-state denylist (see `lib.rs`).
 pub const POPOUT_WINDOW: &str = "call-popout";
 
-/// Where the web app serves the page (`public/desktop/call-popout.html`).
-const POPOUT_PAGE: &str = "desktop/call-popout.html";
+/// The page the web app opens (`public/desktop/call-window.html`); anything else is refused.
+const POPOUT_PATH: &str = "/desktop/call-window.html";
 
-/// The event the main window hears when the pop out window is gone, however it went.
+/// The event the main window hears when the call window is gone, however it went.
 const CLOSED_EVENT: &str = "call-popout-closed";
-
-/// Size in logical pixels.
-const POPOUT_WIDTH: f64 = 480.0;
-const POPOUT_HEIGHT: f64 = 320.0;
-
-/// The page address with the (already translated) labels in the query string.
-fn popout_path(labels: &[(&str, &str)]) -> String {
-    let mut query = url::form_urlencoded::Serializer::new(String::new());
-    for (key, value) in labels {
-        query.append_pair(key, value);
-    }
-    format!("{POPOUT_PAGE}?{}", query.finish())
-}
 
 /// Close the window, if it is open.
 pub fn close_popout(app: &AppHandle) {
@@ -39,58 +28,46 @@ pub fn close_popout(app: &AppHandle) {
     }
 }
 
-/// Open the window with these labels, or bring it forward when it is already open.
-#[tauri::command]
-pub async fn show_call_popout(
-    app: AppHandle,
-    title: String,
-    mute: String,
-    unmute: String,
-    back: String,
-    hangup: String,
-    no_video: String,
-) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window(POPOUT_WINDOW) {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-        return Ok(());
+/// The main window's answer to `window.open`.
+pub fn on_new_window(
+    app: &AppHandle,
+    url: Url,
+    features: NewWindowFeatures,
+) -> NewWindowResponse<Wry> {
+    if url.path() != POPOUT_PATH || app.get_webview_window(POPOUT_WINDOW).is_some() {
+        return NewWindowResponse::Deny;
     }
-    let path = popout_path(&[
-        ("title", &title),
-        ("mute", &mute),
-        ("unmute", &unmute),
-        ("back", &back),
-        ("hangup", &hangup),
-        ("novideo", &no_video),
-    ]);
-    let window = WebviewWindowBuilder::new(&app, POPOUT_WINDOW, WebviewUrl::App(path.into()))
-        .title(title)
-        .inner_size(POPOUT_WIDTH, POPOUT_HEIGHT)
-        .min_inner_size(240.0, 180.0)
-        .always_on_top(true)
-        .background_color(tauri::window::Color(0, 0, 0, 255))
-        .disable_drag_drop_handler()
-        .build()
-        .map_err(|e| e.to_string())?;
-    let handle = app.clone();
-    window.on_window_event(move |event| {
-        if let WindowEvent::Destroyed = event {
-            let _ = handle.emit_to(MAIN_WINDOW, CLOSED_EVENT, ());
+    let built = WebviewWindowBuilder::new(
+        app,
+        POPOUT_WINDOW,
+        WebviewUrl::External("about:blank".parse().expect("a valid url")),
+    )
+    .window_features(features)
+    .title("Mudrix")
+    .min_inner_size(360.0, 240.0)
+    .background_color(tauri::window::Color(26, 27, 30, 255))
+    .disable_drag_drop_handler()
+    .build();
+    match built {
+        Ok(window) => {
+            let handle = app.clone();
+            window.on_window_event(move |event| {
+                if let WindowEvent::Destroyed = event {
+                    let _ = handle.emit_to(MAIN_WINDOW, CLOSED_EVENT, ());
+                }
+            });
+            NewWindowResponse::Create { window }
         }
-    });
-    Ok(())
+        Err(e) => {
+            eprintln!("[desktop] could not open the call window: {e}");
+            NewWindowResponse::Deny
+        }
+    }
 }
 
-/// Close the window (the call ended, or the button was pressed again).
+/// Close the window (the call ended, or the call was brought back). Also clears one left behind
+/// by a reload of the web app, which has lost its link to it.
 #[tauri::command]
 pub fn hide_call_popout(app: AppHandle) {
     close_popout(&app);
-}
-
-/// "Return to call" in the window: bring the main window back (it may be minimised or in the
-/// tray). The page itself asks the web app to go to the call's room.
-#[tauri::command]
-pub fn call_popout_focus_main(app: AppHandle) {
-    commands::show_main_window(&app);
 }
