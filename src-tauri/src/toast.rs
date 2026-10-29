@@ -21,12 +21,16 @@ mod imp {
     use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
 
     /// The app icon, written to a stable path for the toast header.
-    const TOAST_ICON: &[u8] = include_bytes!("../icons/128x128.png");
+    const TOAST_ICON: &[u8] = if crate::dev::IS_DEV {
+        crate::dev::TOAST_ICON
+    } else {
+        include_bytes!("../icons/128x128.png")
+    };
 
     /// Set the process AppUserModelID and register it (name and icon) for unpackaged toasts.
     /// Idempotent; failures are logged, a toast then just shows the fallback name.
     pub fn init(app: &AppHandle) {
-        let id = app.config().identifier.clone();
+        let id = crate::dev::app_id(&app.config().identifier);
         if let Err(e) = unsafe { SetCurrentProcessExplicitAppUserModelID(&HSTRING::from(&id)) } {
             eprintln!("[desktop] could not set the AppUserModelID: {e}");
         }
@@ -67,7 +71,7 @@ mod imp {
             if status != ERROR_SUCCESS {
                 return Err(format!("RegCreateKeyExW failed: {}", status.0));
             }
-            let mut result = set_string(key, w!("DisplayName"), "Mudrix");
+            let mut result = set_string(key, w!("DisplayName"), crate::dev::name());
             if let Some(icon) = icon {
                 result = result.and(set_string(key, w!("IconUri"), icon));
             }
@@ -138,7 +142,7 @@ mod imp {
         body: &str,
         avatar: Option<&[u8]>,
     ) -> Result<(), String> {
-        let id = app.config().identifier.clone();
+        let id = crate::dev::app_id(&app.config().identifier);
         let handle = app.clone();
         let mut toast = tauri_winrt_notification::Toast::new(&id);
         if let Some(path) = avatar.and_then(|png| write_avatar(app, png)) {

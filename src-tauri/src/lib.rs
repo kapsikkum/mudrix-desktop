@@ -15,6 +15,7 @@ mod auth;
 mod badge;
 mod capture;
 mod commands;
+mod dev;
 mod permissions;
 mod popout;
 mod screenshare;
@@ -127,6 +128,9 @@ pub fn run() {
 
             if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
                 permissions::allow_call_media(&window);
+                if let Some(icon) = dev::window_icon() {
+                    let _ = window.set_icon(icon);
+                }
                 // The window starts hidden (no white flash); place it, then show it.
                 let _ = window.restore_state(commands::window_state_flags());
                 if !start_hidden {

@@ -33,7 +33,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
 
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(Image::from_bytes(ICON_NORMAL)?)
-        .tooltip("Mudrix")
+        .tooltip(crate::dev::name())
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -133,7 +133,10 @@ pub fn set_unread(app: &AppHandle, total: u32, highlight: u32) {
 pub fn set_themed_icon(app: &AppHandle, png: Option<Vec<u8>>) {
     let image = png.as_deref().and_then(|b| Image::from_bytes(b).ok());
     if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
-        let icon = image.clone().or_else(|| app.default_window_icon().cloned());
+        let icon = image
+            .clone()
+            .or_else(crate::dev::window_icon)
+            .or_else(|| app.default_window_icon().cloned());
         if let Some(icon) = icon {
             let _ = window.set_icon(icon);
         }
