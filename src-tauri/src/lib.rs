@@ -93,7 +93,13 @@ pub fn run() {
 
             // The main window is made here rather than from the config (`"create": false`
             // there), because only a window made in code can answer `window.open`.
-            if let Some(config) = app.config().app.windows.iter().find(|w| w.label == MAIN_WINDOW) {
+            if let Some(config) = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|w| w.label == MAIN_WINDOW)
+            {
                 let popout_handle = handle.clone();
                 WebviewWindowBuilder::from_config(app, config)?
                     .on_new_window(move |url, features| {
