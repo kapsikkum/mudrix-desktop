@@ -30,19 +30,31 @@ use tauri_plugin_window_state::WindowExt;
 
 pub const MAIN_WINDOW: &str = "main";
 
+/// Where the window's size and place are kept. A dev build shares the installed app's data folder, so
+/// it gets a file of its own, or it would open exactly over the installed app's window.
+const WINDOW_STATE_FILE: &str = if cfg!(debug_assertions) {
+    ".window-state.dev.json"
+} else {
+    ".window-state.json"
+};
+
 /// Launched by the OS at login (the autostart entry passes this flag).
 const AUTOSTART_FLAG: &str = "--autostart";
 
 pub fn run() {
-    let builder = tauri::Builder::default()
-        // Must be the first plugin. A second launch focuses the running window; with the
-        // `deep-link` feature it also forwards any `matrix:` URL to the deep-link plugin.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            commands::show_main_window(app);
-        }))
+    let builder = tauri::Builder::default();
+    // Must be the first plugin. A second launch focuses the running window; with the `deep-link`
+    // feature it also forwards any `matrix:` URL to the deep-link plugin. A dev build skips it: it
+    // shares the installed app's identity, so it would hand over to that app and quit.
+    #[cfg(not(debug_assertions))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        commands::show_main_window(app);
+    }));
+    let builder = builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(
             tauri_plugin_window_state::Builder::default()
+                .with_filename(WINDOW_STATE_FILE)
                 .with_state_flags(commands::window_state_flags())
                 .with_denylist(&[screenshare::BAR_WINDOW, popout::POPOUT_WINDOW])
                 .build(),
@@ -101,11 +113,16 @@ pub fn run() {
                 .find(|w| w.label == MAIN_WINDOW)
             {
                 let popout_handle = handle.clone();
-                WebviewWindowBuilder::from_config(app, config)?
-                    .on_new_window(move |url, features| {
-                        popout::on_new_window(&popout_handle, url, features)
-                    })
-                    .build()?;
+                let window = WebviewWindowBuilder::from_config(app, config)?.on_new_window(
+                    move |url, features| popout::on_new_window(&popout_handle, url, features),
+                );
+                // A dev build keeps its own web data (sign-ins, keys): WebView2 will not share a
+                // profile between two apps started with different options, and two clients on
+                // one profile would fight over its stores.
+                #[cfg(all(debug_assertions, windows))]
+                let window =
+                    window.data_directory(app.path().app_local_data_dir()?.join("dev-webview"));
+                window.build()?;
             }
 
             if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
