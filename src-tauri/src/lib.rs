@@ -3,7 +3,8 @@
 //! Layout: `settings` (persisted shell settings), `tray` (tray icon, menu, unread badge),
 //! `auth` (SSO/OIDC through the system browser), `commands` (what the web app can call),
 //! `badge` (Windows taskbar overlay drawing), `updater` (tauri-plugin-updater, signed updates),
-//! `screenshare` (our screen share bar in place of the one WebView2 draws), `toast` (Windows
+//! `screenshare` (our screen share bar in place of the one WebView2 draws), `popout` (the call's
+//! window of its own), `toast` (Windows
 //! toasts under our own app id, so they say "Mudrix"), `capture` (native screen and window
 //! capture for screen sharing, in place of WebView2's picker), `activity` (the game or music
 //! playing, for the profile's "Playing X" line; only runs when the user switches it on).
@@ -15,6 +16,7 @@ mod badge;
 mod capture;
 mod commands;
 mod permissions;
+mod popout;
 mod screenshare;
 mod settings;
 mod toast;
@@ -42,7 +44,7 @@ pub fn run() {
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(commands::window_state_flags())
-                .with_denylist(&[screenshare::BAR_WINDOW])
+                .with_denylist(&[screenshare::BAR_WINDOW, popout::POPOUT_WINDOW])
                 .build(),
         )
         .plugin(tauri_plugin_notification::init())
@@ -116,6 +118,7 @@ pub fn run() {
                 WindowEvent::Focused(true) => commands::on_focus(app),
                 WindowEvent::Destroyed => {
                     screenshare::close_bar(app);
+                    popout::close_popout(app);
                     capture::stop_all(app);
                 }
                 _ => {}
@@ -139,6 +142,9 @@ pub fn run() {
             screenshare::hide_screen_share_bar,
             screenshare::screen_share_bar_stop,
             screenshare::screen_share_bar_return,
+            popout::show_call_popout,
+            popout::hide_call_popout,
+            popout::call_popout_focus_main,
             capture::capture_list_sources,
             capture::capture_start,
             capture::capture_stop,
