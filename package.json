@@ -1,7 +1,7 @@
 {
   "name": "mudrix-desktop",
   "productName": "Mudrix",
-  "version": "26.10.18",
+  "version": "26.11.0",
   "private": true,
   "description": "Mudrix Desktop: the Mudrix web client in a Tauri shell",
   "homepage": "https://github.com/kapsikkum/mudrix-desktop",
