@@ -34,6 +34,9 @@ const BROWSERS: &[&str] = &[
     "waterfox",
     "zen",
     "arc",
+    // An embedded web view (what an app like this one is built on) is a browser too.
+    "msedgewebview2",
+    "webview2",
     // Firefox reports its install id instead of a name.
     "308046b0af4a39cb",
 ];
@@ -48,6 +51,17 @@ fn id_has_word(app_id: &str, words: &[&str]) -> bool {
 
 fn is_browser(app_id: &str) -> bool {
     id_has_word(app_id, BROWSERS)
+}
+
+/// Whether the session is this app's own window. Watch together plays YouTube inside Mudrix, and
+/// Windows files that under the app, where it would pass for a music player.
+fn is_self(app_id: &str) -> bool {
+    let id = app_id.to_lowercase();
+    // The app's name, and the name of the running program (a dev build is not called Mudrix).
+    let exe = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().to_lowercase()));
+    id.contains("mudrix") || exe.is_some_and(|name| name.len() >= 4 && id.contains(&name))
 }
 
 /// Players and apps whose "track" is a film, episode or file name: never shared.
@@ -119,7 +133,7 @@ fn is_music_app(app_id: &str) -> bool {
 
 /// Whether a session counts as music: it says so, or it is a known music app and says nothing.
 fn counts_as_music(app_id: &str, kind: Option<MediaPlaybackType>) -> bool {
-    if is_browser(app_id) || is_video_app(app_id) {
+    if is_browser(app_id) || is_video_app(app_id) || is_self(app_id) {
         return false;
     }
     match kind {
@@ -148,7 +162,7 @@ fn track_of(session: &Session) -> Option<Track> {
         return None;
     }
     let app = session.SourceAppUserModelId().ok()?.to_string();
-    if is_browser(&app) || is_video_app(&app) {
+    if is_browser(&app) || is_video_app(&app) || is_self(&app) {
         return None;
     }
     let props = session.TryGetMediaPropertiesAsync().ok()?.join().ok()?;
@@ -189,6 +203,19 @@ mod tests {
         assert!(!is_browser(
             "Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic"
         ));
+    }
+
+    #[test]
+    fn this_app_and_its_web_view_never_count() {
+        for app in ["Mudrix.exe", "mudrix-desktop.exe", "MSEdgeWebView2"] {
+            assert!(
+                !counts_as_music(app, Some(MediaPlaybackType::Music)),
+                "{app}"
+            );
+            assert!(!counts_as_music(app, None), "{app}");
+        }
+        assert!(is_self("Mudrix.exe"));
+        assert!(!is_self("Spotify.exe"));
     }
 
     #[test]
