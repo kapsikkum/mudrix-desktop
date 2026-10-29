@@ -34,7 +34,13 @@ pub fn on_new_window(
     url: Url,
     features: NewWindowFeatures,
 ) -> NewWindowResponse<Wry> {
-    if url.path() != POPOUT_PATH || app.get_webview_window(POPOUT_WINDOW).is_some() {
+    // Only our own page: the same origin as the window that asked, not just the same path
+    let same_origin = app
+        .get_webview_window(MAIN_WINDOW)
+        .and_then(|main| main.url().ok())
+        .is_some_and(|main| main.origin() == url.origin());
+    if !same_origin || url.path() != POPOUT_PATH || app.get_webview_window(POPOUT_WINDOW).is_some()
+    {
         return NewWindowResponse::Deny;
     }
     let built = WebviewWindowBuilder::new(

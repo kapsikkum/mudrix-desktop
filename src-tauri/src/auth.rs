@@ -37,6 +37,10 @@ struct Listener {
     nonce: String,
     /// Pushed forward by every login attempt; the thread exits once it passes.
     deadline: Instant,
+    /// The state of the OIDC login in progress. The OIDC redirect address is fixed, so nothing else
+    /// ties a callback to a login that this app started: any program or web page on this machine could
+    /// otherwise send the app a callback.
+    oidc_state: Option<String>,
 }
 
 static ACTIVE: Mutex<Option<Listener>> = Mutex::new(None);
@@ -61,6 +65,7 @@ fn ensure_listening(app: &AppHandle) -> Result<(u16, String), String> {
         port,
         nonce: nonce.clone(),
         deadline: Instant::now() + IDLE_TIMEOUT,
+        oidc_state: None,
     });
     drop(active);
 
@@ -140,15 +145,25 @@ fn handle(app: &AppHandle, mut stream: TcpStream, port: u16) {
         .query_pairs()
         .find(|(k, _)| k == NONCE_PARAM)
         .map(|(_, v)| v.into_owned());
-    let expected = ACTIVE.lock().unwrap().as_ref().map(|l| l.nonce.clone());
+    let (expected, expected_state) = ACTIVE
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|l| (Some(l.nonce.clone()), l.oidc_state.clone()))
+        .unwrap_or_default();
     let is_sso = has("loginToken");
     // SSO callbacks must carry the nonce we put in; OIDC callbacks (fixed redirect URI) do not.
+    let is_oidc = has("code") || has("error");
+    let state = url
+        .query_pairs()
+        .find(|(k, _)| k == "state")
+        .map(|(_, v)| v.into_owned());
     let nonce_ok = if is_sso {
         nonce.is_some() && nonce == expected
     } else {
-        nonce.is_none() || nonce == expected
+        // An OIDC callback has to belong to the login this app started
+        nonce.is_none() && state.is_some() && state == expected_state
     };
-    let is_oidc = has("code") || has("error");
     if method != "GET" || !host_ok || !nonce_ok || !(is_sso || is_oidc) {
         return respond(stream, "400 Bad Request", ERROR_PAGE);
     }
@@ -192,6 +207,15 @@ pub fn open_in_browser(app: &AppHandle, raw: &str) -> Result<(), String> {
         return Err(format!(
             "the login callback port {OIDC_PORT} is in use by another program"
         ));
+    }
+    if redirect.is_none() {
+        let state = url
+            .query_pairs()
+            .find(|(k, _)| k == "state")
+            .map(|(_, v)| v.into_owned());
+        if let Some(l) = ACTIVE.lock().unwrap().as_mut() {
+            l.oidc_state = state;
+        }
     }
     if let Some(redirect) = redirect {
         let carried: Vec<(String, String)> = Url::parse(&redirect)
