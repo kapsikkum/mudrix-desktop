@@ -1,9 +1,9 @@
 # Releasing Mudrix Desktop
 
 Releases are plain `v*` tags built by `.github/workflows/release.yml`. A tag with a suffix
-(`v26.10.3-next.1`, `-rc.1`, `-beta.1`) is published as a pre-release, which GitHub does not treat as
-"latest". Upstream WizardChat used `prepare/v26.10.2-next.N` branches; the numbers here follow the same
-`YEAR.MONTH.N` scheme.
+(`v26.11.0-next.1`, `-rc.1`, `-beta.1`) is published as a pre-release, which GitHub does not treat as
+"latest"; see "Pre-releases from `next`" below. Upstream WizardChat used `prepare/v26.10.2-next.N` branches;
+the numbers here follow the same `YEAR.MONTH.N` scheme.
 
 Installers are **not code-signed** (no Windows certificate, no Apple notarization, by decision). The release
 notes say so; see "Unsigned builds" in the README. In-app update artifacts are signed with a minisign key
@@ -53,6 +53,50 @@ on Windows.
 
 `workflow_dispatch` runs the same pipeline for an existing tag/version: enter the version, it must match
 `package.json`.
+
+## Pre-releases from `next`
+
+Test builds come from the `next` branch and use a suffixed version of the release they lead up to:
+
+```
+26.11.0-next.1  <  26.11.0-next.2  <  26.11.0-rc.1  <  26.11.0
+```
+
+Use the **same version string as the web client and the mobile app**. Any tag with a `-` is a pre-release.
+
+What is different from a stable release:
+
+| | stable | pre-release |
+| --- | --- | --- |
+| GitHub release | "latest" | marked pre-release, not "latest" |
+| Windows | NSIS installer and MSI | NSIS installer only (WiX only takes numeric versions) |
+| in-app updates | offered to installed apps | **never offered**: `latest/download/latest.json` ignores pre-releases, so testers install by hand and a stable install does not update to a pre-release |
+| macOS, Linux | same | same |
+
+To cut one:
+
+1. Release the web client first (`RELEASING.md` in `mudrix-web`) and push its tag; the commit has to be on
+   GitHub before CI can check it out.
+2. On `next`, point the submodule at the web commit or tag you just released:
+   ```sh
+   git checkout next
+   git -C mudrix-web fetch origin
+   git -C mudrix-web checkout v26.11.0-next.1
+   git add mudrix-web
+   ```
+3. Set the version and commit (`set-version` updates `package.json`, `Cargo.toml` and `Cargo.lock`, then
+   runs `check-version`):
+   ```sh
+   node scripts/set-version.mjs 26.11.0-next.1
+   git commit -am "chore(release): prepare v26.11.0-next.1"
+   ```
+4. `git tag v26.11.0-next.1 && git push origin next v26.11.0-next.1`.
+
+To build without a tag, run **Actions > Release > Run workflow** on the `next` branch and enter the version
+(it must match `package.json`).
+
+To go from the last pre-release to the stable release, merge `next` into `main`, set the plain version
+(`26.11.0`) and follow "Cut a release" above.
 
 ## Locally
 
@@ -148,3 +192,8 @@ these still need a hands-on check on real machines:
   Windows passive install and the macOS bundle swap especially); it needs an installed build older than the
   latest published release to test.
 - Activity detection on real machines (Spotify, VLC and other players, games from the known-games list).
+- System-wide push to talk (`src-tauri/src/ptt.rs`, a listen-only `rdev` hook): checked on Windows with
+  injected key presses (press, release, auto-repeat, other keys ignored, unbinding). Not checked on macOS
+  (Input Monitoring permission prompt and behaviour on macOS 14 and newer; if the hook crashes there, try the
+  `rustdesk-org/rdev` fork) or on Linux (X11 needs `libxtst-dev` to build; Wayland is not expected to allow a global
+  key hook; then the web client keeps to keys the window itself hears).
