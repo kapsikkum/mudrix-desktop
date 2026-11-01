@@ -4,6 +4,8 @@
 <dict>
     <key>NSCameraUsageDescription</key>
     <string>Mudrix needs camera access for video calls.</string>
+    <key>NSInputMonitoringUsageDescription</key>
+    <string>Mudrix needs input monitoring to hear your push-to-talk key while another app is in front.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Mudrix needs microphone access for voice and video calls.</string>
     <key>NSScreenCaptureUsageDescription</key>

@@ -37,9 +37,30 @@ pub struct NavState {
 #[derive(Default)]
 pub struct LastNotification(Mutex<Option<(String, Instant)>>);
 
+/// Whether the main window was last reported as fullscreen (`fullscreen-changed`).
+#[derive(Default)]
+pub struct FullscreenState(AtomicBool);
+
 // ---------------------------------------------------------------------------
 // Window helpers
 // ---------------------------------------------------------------------------
+
+/// Tell the main window when it enters or leaves fullscreen (the web app drops the macOS
+/// traffic-light padding while it is). Called on resizes, which is when fullscreen changes.
+pub fn check_fullscreen(app: &AppHandle) {
+    let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
+        return;
+    };
+    let fullscreen = window.is_fullscreen().unwrap_or(false);
+    if app
+        .state::<FullscreenState>()
+        .0
+        .swap(fullscreen, Ordering::SeqCst)
+        != fullscreen
+    {
+        let _ = app.emit_to(MAIN_WINDOW, "fullscreen-changed", fullscreen);
+    }
+}
 
 fn emit_visibility(app: &AppHandle, visible: bool) {
     let _ = app.emit("desktop://visibility", visible);

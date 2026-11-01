@@ -31,6 +31,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
+# Push to talk heard system-wide (src/ptt.rs). Listen only: the key still reaches the focused app.
+rdev = "=0.5.3"
 
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"

@@ -7,7 +7,8 @@
 //! window of its own), `toast` (Windows
 //! toasts under our own app id, so they say "Mudrix"), `capture` (native screen and window
 //! capture for screen sharing, in place of WebView2's picker), `activity` (the game or music
-//! playing, for the profile's "Playing X" line; only runs when the user switches it on).
+//! playing, for the profile's "Playing X" line; only runs when the user switches it on), `ptt`
+//! (push to talk heard system-wide).
 
 mod accent;
 mod activity;
@@ -18,6 +19,7 @@ mod commands;
 mod dev;
 mod permissions;
 mod popout;
+mod ptt;
 mod screenshare;
 mod settings;
 mod toast;
@@ -77,6 +79,8 @@ pub fn run() {
             app.manage(settings::SettingsState(Mutex::new(loaded)));
             app.manage(commands::NavState::default());
             app.manage(commands::LastNotification::default());
+            app.manage(commands::FullscreenState::default());
+            app.manage(ptt::PttState::default());
             activity::init(&handle);
 
             #[cfg(windows)]
@@ -154,6 +158,9 @@ pub fn run() {
                     }
                 }
                 WindowEvent::Focused(true) => commands::on_focus(app),
+                WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                    commands::check_fullscreen(app)
+                }
                 WindowEvent::Destroyed => {
                     screenshare::close_bar(app);
                     popout::close_popout(app);
@@ -181,6 +188,9 @@ pub fn run() {
             screenshare::screen_share_bar_stop,
             screenshare::screen_share_bar_return,
             popout::hide_call_popout,
+            ptt::ptt_set_key,
+            ptt::ptt_permission,
+            ptt::ptt_request_permission,
             capture::capture_list_sources,
             capture::capture_start,
             capture::capture_stop,

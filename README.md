@@ -92,6 +92,13 @@ an identity provider, so the app signs in through your system browser and a loop
 Known gap: the "SSO popup" used for cross-signing / UIA re-authentication needs `window.opener`
 messaging and is not reworked for the system browser; use the homeserver's account page in that case.
 
+## Push to talk
+
+The push-to-talk key is heard system-wide (`src-tauri/src/ptt.rs`, using `rdev`; it only listens, the key
+still reaches the app in front). On macOS this needs Input Monitoring (System Settings > Privacy &
+Security); the web app asks for it. Under Linux it needs an X11 session: on Wayland it is reported as
+unsupported and the key only works while the Mudrix window is focused.
+
 ## Notifications
 
 On Windows and Linux the notification plugin cannot report clicks. Instead, when the window gains focus
