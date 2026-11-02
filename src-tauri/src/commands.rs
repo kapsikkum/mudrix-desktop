@@ -176,6 +176,10 @@ pub fn apply_settings(app: &AppHandle, patch: &SettingsPatch) -> DesktopSettings
         }
     }
     tray::sync_mute(app, updated.notifications_muted);
+    if patch.include_prereleases.is_some() {
+        // A downloaded update came from the other channel; the next check fetches the right one.
+        crate::updater::forget_ready(app);
+    }
     let _ = app.emit("desktop://settings-changed", updated.clone());
     updated
 }
@@ -412,8 +416,8 @@ pub fn is_window_visible(app: AppHandle) -> bool {
 }
 
 #[tauri::command]
-pub fn install_update(app: AppHandle) {
-    crate::updater::install(&app);
+pub fn install_update(app: AppHandle) -> Result<(), String> {
+    crate::updater::install(&app)
 }
 
 #[tauri::command]

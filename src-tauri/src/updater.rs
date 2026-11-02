@@ -20,6 +20,10 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 const REPO: &str = "kapsikkum/mudrix-desktop";
+/// The update manifest of the newest release of any kind. The release workflow replaces it on every
+/// release, stable or not, so a pre-release channel also moves on to the next stable version.
+const PRERELEASE_MANIFEST: &str =
+    "https://github.com/kapsikkum/mudrix-desktop/releases/download/channel-next/latest.json";
 const CHECK_EVERY: Duration = Duration::from_secs(60 * 60);
 const KEY_PLACEHOLDER: &str = "REPLACE_WITH";
 
@@ -142,7 +146,14 @@ async fn check_inner(app: &AppHandle) -> Result<CheckStatus, Box<dyn std::error:
         return Ok(CheckStatus::Ready);
     }
 
-    let Some(update) = app.updater()?.check().await? else {
+    let updater = if crate::settings::get(app).include_prereleases {
+        app.updater_builder()
+            .endpoints(vec![PRERELEASE_MANIFEST.parse()?])?
+            .build()?
+    } else {
+        app.updater()?
+    };
+    let Some(update) = updater.check().await? else {
         return Ok(CheckStatus::UpToDate);
     };
     let version = update.version.clone();
@@ -182,11 +193,21 @@ fn announce(app: &AppHandle, version: &str, url: &str, event: &str) {
     );
 }
 
+/// Drops a downloaded update (and the "already announced" note) so the next check starts afresh,
+/// for when the update channel changes.
+pub fn forget_ready(app: &AppHandle) {
+    let state = app.state::<UpdateState>();
+    *state.ready.lock().unwrap() = None;
+    *state.announced.lock().unwrap() = None;
+}
+
 /// Install the downloaded update and restart. On Windows the installer (passive mode, with a
-/// progress window) ends this process itself.
-pub fn install(app: &AppHandle) {
+/// progress window) ends this process itself, so success is only ever seen on the other platforms.
+pub fn install(app: &AppHandle) -> Result<(), String> {
     let ready = app.state::<UpdateState>().ready.lock().unwrap().take();
-    let Some(ready) = ready else { return };
+    let Some(ready) = ready else {
+        return Err("no update is ready to install".into());
+    };
     match ready.update.install(&ready.bytes) {
         Ok(()) => {
             log(&format!("installed update {}", ready.update.version));
@@ -196,6 +217,7 @@ pub fn install(app: &AppHandle) {
             log(&format!("update install failed: {e}"));
             // Keep it so the user can try again.
             *app.state::<UpdateState>().ready.lock().unwrap() = Some(ready);
+            Err(e.to_string())
         }
     }
 }

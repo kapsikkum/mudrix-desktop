@@ -20,6 +20,8 @@ pub struct DesktopSettings {
     pub start_minimized: bool,
     /// Tray "Mute notifications".
     pub notifications_muted: bool,
+    /// Also offer pre-releases (`-next`, `-rc`, `-beta`) through the in-app updater.
+    pub include_prereleases: bool,
 }
 
 impl Default for DesktopSettings {
@@ -29,6 +31,7 @@ impl Default for DesktopSettings {
             launch_at_login: false,
             start_minimized: false,
             notifications_muted: false,
+            include_prereleases: false,
         }
     }
 }
@@ -40,6 +43,7 @@ pub struct SettingsPatch {
     pub launch_at_login: Option<bool>,
     pub start_minimized: Option<bool>,
     pub notifications_muted: Option<bool>,
+    pub include_prereleases: Option<bool>,
 }
 
 impl DesktopSettings {
@@ -55,6 +59,9 @@ impl DesktopSettings {
         }
         if let Some(v) = patch.notifications_muted {
             self.notifications_muted = v;
+        }
+        if let Some(v) = patch.include_prereleases {
+            self.include_prereleases = v;
         }
     }
 }

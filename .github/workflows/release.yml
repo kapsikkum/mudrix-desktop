@@ -274,3 +274,13 @@ jobs:
           generate_release_notes: true
           body_path: body.md
           files: out/*
+      # The in-app updater's pre-release channel reads this one fixed manifest (see src-tauri/src/updater.rs).
+      # It is a release of its own, marked pre-release so GitHub never treats it as "latest".
+      - name: Point the pre-release channel at this release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view channel-next >/dev/null 2>&1 || gh release create channel-next \
+            --prerelease --title "Update channel (pre-releases)" \
+            --notes "Holds the update manifest that apps with \"include pre-releases\" switched on read. There is nothing to download here."
+          gh release upload channel-next out/latest.json --clobber
