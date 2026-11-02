@@ -24,8 +24,8 @@ notes say so; see "Unsigned builds" in the README. In-app update artifacts are s
 Keep the `Mudrix-<v>-windows-x64-setup.exe` / `-macos-universal.dmg` names and `SHA256SUMS.txt`: installs
 from before the signed updater still use the old updater, which looks for exactly those.
 
-MSI (WiX) only accepts numeric pre-release versions, so pre-release tags build the NSIS installer only
-on Windows.
+MSI (WiX) only accepts numeric pre-release versions, and deb/rpm reject the `-` in one, so pre-release tags
+build the NSIS installer only on Windows and the AppImage only on Linux.
 
 ## Cut a release
 
@@ -71,7 +71,8 @@ What is different from a stable release:
 | GitHub release | "latest" | marked pre-release, not "latest" |
 | Windows | NSIS installer and MSI | NSIS installer only (WiX only takes numeric versions) |
 | in-app updates | offered to installed apps | **never offered**: `latest/download/latest.json` ignores pre-releases, so testers install by hand and a stable install does not update to a pre-release |
-| macOS, Linux | same | same |
+| Linux | AppImage, .deb and .rpm | AppImage only (deb and rpm do not take a `-` in the version) |
+| macOS | same | same |
 
 To cut one:
 

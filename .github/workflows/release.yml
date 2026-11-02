@@ -129,14 +129,17 @@ jobs:
           git -C mudrix-web fetch --tags --force --unshallow origin 2>/dev/null || git -C mudrix-web fetch --tags --force origin || true
           (cd mudrix-web && node scripts/release-notes.mjs "${{ needs.prepare.outputs.version }}") || echo "::warning::could not write the release notes"
 
-      # MSI (WiX) only accepts numeric pre-release versions, so a -next/-rc/-beta tag builds
-      # the NSIS installer only on Windows.
-      - name: Choose the Windows bundles
+      # MSI (WiX) only accepts numeric pre-release versions, and deb/rpm reject the '-' in one, so a
+      # -next/-rc/-beta tag builds only the NSIS installer on Windows and the AppImage on Linux (the
+      # AppImage is also what the in-app updater uses there).
+      - name: Choose the bundles
         id: bundles
         shell: bash
         run: |
-          if [ "${{ matrix.platform }}" = "windows-latest" ] && [ "${{ needs.prepare.outputs.prerelease }}" = "true" ]; then
+          if [ "${{ needs.prepare.outputs.prerelease }}" = "true" ] && [ "${{ matrix.platform }}" = "windows-latest" ]; then
             echo "args=${{ matrix.args }} --bundles nsis" >> "$GITHUB_OUTPUT"
+          elif [ "${{ needs.prepare.outputs.prerelease }}" = "true" ] && [ "${{ matrix.name }}" = "linux-x64" ]; then
+            echo "args=${{ matrix.args }} --bundles appimage" >> "$GITHUB_OUTPUT"
           else
             echo "args=${{ matrix.args }}" >> "$GITHUB_OUTPUT"
           fi
