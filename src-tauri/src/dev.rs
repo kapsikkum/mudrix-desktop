@@ -7,6 +7,7 @@ use tauri::image::Image;
 pub const IS_DEV: bool = cfg!(debug_assertions);
 
 const WINDOW_ICON: &[u8] = include_bytes!("../icons/dev/icon.png");
+#[cfg(windows)]
 pub const TOAST_ICON: &[u8] = include_bytes!("../icons/dev/128x128.png");
 
 /// The icon for the window and taskbar, or `None` in a release build.
@@ -26,6 +27,7 @@ pub fn name() -> &'static str {
 }
 
 /// The Windows AppUserModelID, which is what the taskbar groups windows (and toasts) by.
+#[cfg(windows)]
 pub fn app_id(identifier: &str) -> String {
     if IS_DEV {
         format!("{identifier}.dev")
