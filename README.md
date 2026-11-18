@@ -1,3 +1,11 @@
+> **Archived — Mudrix Desktop moved into the Mudrix monorepo: [`apps/desktop`](https://github.com/kapsikkum/mudrix/tree/main/apps/desktop).**
+>
+> Installers come from [the new repository's releases](https://github.com/kapsikkum/mudrix/releases/latest), built with the same app id
+> (`chat.mudrix.desktop`) and the same signing key, so installing one replaces this build in place and keeps
+> your settings. The latest release here is only a pointer: its updater manifest installs the new app over 26.11.0
+> on Windows, Linux and Apple Silicon. Intel Macs stay on 26.11.0, because the new app is Apple silicon only.
+> Issues and pull requests moved as well; this repository is read-only.
+
 # Mudrix Desktop
 
 The desktop app for [Mudrix](https://github.com/kapsikkum/mudrix-web), built with [Tauri v2](https://tauri.app).
